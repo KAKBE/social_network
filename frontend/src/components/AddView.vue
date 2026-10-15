@@ -14,6 +14,7 @@ const results = ref([]);
 const searchMessage = ref("");
 const searching = ref(false);
 const point = ref(null);
+const pointFromAddress = ref(false);
 const address = ref("");
 const name = ref("");
 const text = ref("");
@@ -52,6 +53,7 @@ function choose(result) {
   if (!name.value) name.value = result.display_name.split(",")[0];
   results.value = [];
   setPoint(result.lat, result.lon);
+  pointFromAddress.value = true;
 }
 
 async function publish() {
@@ -71,6 +73,7 @@ async function publish() {
     });
     query.value = address.value = name.value = text.value = "";
     point.value = null;
+    pointFromAddress.value = false;
     pin?.remove();
     pin = null;
     emit("created", rec);
@@ -85,8 +88,8 @@ onMounted(() => {
   map = L.map(container.value, { zoomControl: false }).setView([55.751, 37.618], 11);
   L.tileLayer(props.config.tile_url, { maxZoom: 19, attribution: props.config.tile_attribution }).addTo(map);
   map.on("click", (e) => {
-    address.value = "";
     setPoint(e.latlng.lat, e.latlng.lng);
+    pointFromAddress.value = false;
   });
 });
 
@@ -113,6 +116,9 @@ watch(
     </ul>
     <p class="muted small">Или нажмите на карту, чтобы отметить место вручную.</p>
     <div ref="container" class="mini-map"></div>
+    <p v-if="pointFromAddress" class="muted small">
+      Точка найдена по адресу и может отличаться от места на сотни метров. Проверьте её и при необходимости нажмите на карту, чтобы поправить.
+    </p>
     <form class="stack" @submit.prevent="publish">
       <label>Название <input v-model="name" maxlength="200" required /></label>
       <label>
