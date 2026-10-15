@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -10,6 +11,8 @@ from app.models import GeocodeCacheEntry
 
 # Moscow including New Moscow, as Nominatim viewbox: left,top,right,bottom.
 MOSCOW_VIEWBOX = "36.80,56.02,38.00,55.14"
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class GeocoderUnavailable(Exception):
@@ -63,6 +66,7 @@ class NominatimGeocoder:
                 )
                 response.raise_for_status()
             except httpx.HTTPError as exc:
+                logger.warning("Geocoder unavailable: %s: %r", type(exc).__name__, exc)
                 raise GeocoderUnavailable(str(exc)) from exc
             finally:
                 self._last_request_at = time.monotonic()

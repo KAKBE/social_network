@@ -72,6 +72,17 @@ class AddPlaceIn(BaseModel):
     place_id: int
 
 
+class PerfSampleIn(BaseModel):
+    series: str = Field(min_length=1, max_length=100)
+    seq: int = Field(ge=0)
+    total_ms: float = Field(ge=0)
+    dom_ready_ms: float = Field(ge=0)
+    feed_ms: float = Field(ge=0)
+    server_ms: float | None = None
+    markers: int = Field(ge=0)
+    navigation_type: str = Field(max_length=30)
+
+
 class ClientConfigOut(BaseModel):
     tile_url: str
     tile_attribution: str

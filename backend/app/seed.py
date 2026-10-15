@@ -10,7 +10,15 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.db import Base, SessionLocal, engine
-from app.models import Friendship, Place, PlaceList, Recommendation, User
+from app.models import (
+    Friendship,
+    GeocodeCacheEntry,
+    PerfSample,
+    Place,
+    PlaceList,
+    Recommendation,
+    User,
+)
 from app.security import hash_password
 
 DEMO_PASSWORD = "demo1234"
@@ -92,7 +100,9 @@ def seed(session: Session) -> None:
 
 
 def reset_and_seed() -> None:
-    Base.metadata.drop_all(engine)
+    # Measurements and the geocoder cache are evidence for the RAT and survive a data reset.
+    kept = {PerfSample.__tablename__, GeocodeCacheEntry.__tablename__}
+    Base.metadata.drop_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in kept])
     Base.metadata.create_all(engine)
     with SessionLocal() as session:
         seed(session)

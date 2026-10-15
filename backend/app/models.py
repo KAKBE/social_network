@@ -97,6 +97,24 @@ class PlaceListItem(Base):
     place: Mapped[Place] = relationship()
 
 
+class PerfSample(Base):
+    """One measurement of RAT criterion K2, sent by the client after the map markers are painted."""
+
+    __tablename__ = "perf_samples"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    series: Mapped[str] = mapped_column(String(100))
+    seq: Mapped[int]
+    total_ms: Mapped[float] = mapped_column(Float)
+    dom_ready_ms: Mapped[float] = mapped_column(Float)
+    feed_ms: Mapped[float] = mapped_column(Float)
+    server_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    markers: Mapped[int]
+    navigation_type: Mapped[str] = mapped_column(String(30))
+    user_agent: Mapped[str] = mapped_column(String(400))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class GeocodeCacheEntry(Base):
     __tablename__ = "geocode_cache"
 

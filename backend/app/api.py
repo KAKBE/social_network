@@ -1,6 +1,8 @@
+import csv
+import io
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -10,6 +12,7 @@ from app.geocoding import GeocoderUnavailable, geocoder
 from app.models import (
     AuthSession,
     Friendship,
+    PerfSample,
     Place,
     PlaceList,
     PlaceListItem,
@@ -23,6 +26,7 @@ from app.schemas import (
     GeocodeItemOut,
     GeocodeOut,
     LoginIn,
+    PerfSampleIn,
     PlaceListIn,
     PlaceListOut,
     PlaceOut,
@@ -216,6 +220,41 @@ def add_place_to_list(list_id: int, body: AddPlaceIn, user: CurrentUser, session
         session.add(PlaceListItem(list_id=place_list.id, place_id=body.place_id))
         session.commit()
     return load_list_out(session, place_list)
+
+
+@router.post("/perf", status_code=status.HTTP_204_NO_CONTENT)
+def save_perf_sample(
+    body: PerfSampleIn,
+    user: CurrentUser,
+    session: DbSession,
+    user_agent: Annotated[str, Header()] = "",
+) -> None:
+    session.add(PerfSample(**body.model_dump(), user_agent=user_agent[:400]))
+    session.commit()
+
+
+PERF_COLUMNS = [
+    "series",
+    "seq",
+    "total_ms",
+    "dom_ready_ms",
+    "feed_ms",
+    "server_ms",
+    "markers",
+    "navigation_type",
+    "user_agent",
+    "created_at",
+]
+
+
+@router.get("/perf.csv")
+def export_perf_samples(session: DbSession) -> Response:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(PERF_COLUMNS)
+    for sample in session.scalars(select(PerfSample).order_by(PerfSample.id)):
+        writer.writerow([getattr(sample, column) for column in PERF_COLUMNS])
+    return Response(buffer.getvalue(), media_type="text/csv; charset=utf-8")
 
 
 @router.delete("/lists/{list_id}/places/{place_id}")
