@@ -1,0 +1,20 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.3, pytest-9.1.1, pluggy-1.7.0 -- C:\Users\User\Desktop\Code\social_network\.venv\Scripts\python.exe
+rootdir: C:\Users\User\Desktop\Code\social_network\backend
+plugins: anyio-4.15.1
+collecting ... collected 6 items
+
+tests/test_access.py::test_feed_requires_login PASSED                    [ 16%]
+tests/test_access.py::test_feed_contains_all_friend_recommendations_and_no_others PASSED [ 33%]
+tests/test_access.py::test_friends_of_friends_are_not_visible PASSED     [ 50%]
+tests/test_access.py::test_new_recommendation_visible_to_friends_only PASSED [ 66%]
+tests/test_access.py::test_cannot_save_invisible_place_or_use_foreign_list PASSED [ 83%]
+tests/test_access.py::test_save_friend_place_to_study_list PASSED        [100%]
+
+============================== warnings summary ===============================
+..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\User\Desktop\Code\social_network\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 6 passed, 1 warning in 3.02s =========================

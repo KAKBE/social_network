@@ -5,6 +5,8 @@ Run from the repository root after geocode_check.py:  .venv\\Scripts\\python che
 Does not change K1: Nominatim answers are read from checks/geocode_raw.json and never re-requested.
 The key is read from YANDEX_GEOCODER_API_KEY (environment or .env in the repository root).
 Raw Yandex responses are stored in checks/geocode_yandex_raw.json; a second run reuses them unless --refetch.
+Yandex Maps API terms (5.1.5) allow caching responses for at most 30 days, so the raw file is git-ignored and
+the committed comparison holds only our own distances, not Yandex data.
 """
 
 import argparse
@@ -114,7 +116,6 @@ def main() -> None:
                 "nominatim_hit": "да" if n_dist is not None and n_dist <= THRESHOLD_M else "нет",
                 "yandex_distance_m": fmt(y_dist),
                 "yandex_hit": "да" if y_dist is not None and y_dist <= THRESHOLD_M else "нет",
-                "yandex_name": y_results[0]["display_name"] if y_results else "нет результата",
                 "nominatim_to_yandex_m": fmt(between),
             }
         )

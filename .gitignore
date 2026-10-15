@@ -6,3 +6,4 @@ node_modules/
 frontend/dist/
 .env
 checks/geocode_cache.json
+checks/geocode_yandex_raw.json
