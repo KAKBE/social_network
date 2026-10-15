@@ -42,6 +42,9 @@ def load_addresses() -> list[dict[str, str]]:
     missing = [r["id"] for r in rows if not r["ref_lat"].strip() or not r["ref_lon"].strip()]
     if missing:
         sys.exit(f"Нет эталонных координат для адресов: {', '.join(missing)}. Заполните checks/addresses.csv.")
+    outside = [r["id"] for r in rows if not (55.14 <= float(r["ref_lat"]) <= 56.02 and 36.80 <= float(r["ref_lon"]) <= 38.00)]
+    if outside:
+        sys.exit(f"Эталон вне Москвы у адресов: {', '.join(outside)}. Проверьте, не перепутаны ли широта и долгота.")
     return rows
 
 
