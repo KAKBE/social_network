@@ -46,7 +46,8 @@ class NominatimGeocoder:
         self._lock = threading.Lock()
         self._last_request_at = 0.0
 
-    def _fetch(self, query: str) -> list[GeocodeResult]:
+    def fetch(self, query: str) -> list[GeocodeResult]:
+        """Uncached request; callers are responsible for caching the results."""
         with self._lock:
             wait = self._min_interval_s - (time.monotonic() - self._last_request_at)
             if wait > 0:
@@ -81,7 +82,7 @@ class NominatimGeocoder:
         cached = session.get(GeocodeCacheEntry, key)
         if cached is not None:
             return [GeocodeResult(**item) for item in cached.results], True
-        results = self._fetch(query)
+        results = self.fetch(query)
         session.merge(GeocodeCacheEntry(query=key, results=[asdict(r) for r in results]))
         session.commit()
         return results, False
