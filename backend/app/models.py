@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +60,8 @@ class Place(Base):
     lat: Mapped[float] = mapped_column(Float)
     lon: Mapped[float] = mapped_column(Float)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # ADR-4 metric: the author moved the geocoder's point on the map after choosing an address.
+    point_corrected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class Recommendation(Base):

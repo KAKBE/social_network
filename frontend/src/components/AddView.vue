@@ -15,6 +15,7 @@ const searchMessage = ref("");
 const searching = ref(false);
 const point = ref(null);
 const pointFromAddress = ref(false);
+const pointCorrected = ref(false);
 const address = ref("");
 const name = ref("");
 const text = ref("");
@@ -54,6 +55,7 @@ function choose(result) {
   results.value = [];
   setPoint(result.lat, result.lon);
   pointFromAddress.value = true;
+  pointCorrected.value = false;
 }
 
 async function publish() {
@@ -70,10 +72,12 @@ async function publish() {
       lat: point.value.lat,
       lon: point.value.lon,
       text: text.value.trim(),
+      point_corrected: pointCorrected.value,
     });
     query.value = address.value = name.value = text.value = "";
     point.value = null;
     pointFromAddress.value = false;
+    pointCorrected.value = false;
     pin?.remove();
     pin = null;
     emit("created", rec);
@@ -89,6 +93,7 @@ onMounted(() => {
   L.tileLayer(props.config.tile_url, { maxZoom: 19, attribution: props.config.tile_attribution }).addTo(map);
   map.on("click", (e) => {
     setPoint(e.latlng.lat, e.latlng.lng);
+    if (address.value) pointCorrected.value = true;
     pointFromAddress.value = false;
   });
 });

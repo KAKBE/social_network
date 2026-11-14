@@ -1,4 +1,4 @@
-"""Recreates the schema and loads synthetic test data.
+"""Brings the schema to the latest migration, clears user data and loads synthetic test data.
 
 All places are synthetic points inside central Moscow named "Тестовое место"; they are not real
 recommendations and must not be presented as user data.
@@ -7,9 +7,11 @@ recommendations and must not be presented as user data.
 import random
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import Base, SessionLocal, engine
+from app.migrations import upgrade_to_head
 from app.models import (
     Friendship,
     GeocodeCacheEntry,
@@ -102,8 +104,10 @@ def seed(session: Session) -> None:
 def reset_and_seed() -> None:
     # Measurements and the geocoder cache are evidence for the RAT and survive a data reset.
     kept = {PerfSample.__tablename__, GeocodeCacheEntry.__tablename__}
-    Base.metadata.drop_all(engine, tables=[t for t in Base.metadata.sorted_tables if t.name not in kept])
-    Base.metadata.create_all(engine)
+    upgrade_to_head()
+    cleared = ", ".join(t.name for t in Base.metadata.sorted_tables if t.name not in kept)
+    with engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {cleared} RESTART IDENTITY CASCADE"))
     with SessionLocal() as session:
         seed(session)
 

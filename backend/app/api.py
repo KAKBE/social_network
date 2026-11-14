@@ -147,7 +147,14 @@ def feed(
 
 @router.post("/recommendations", status_code=status.HTTP_201_CREATED)
 def create_recommendation(body: RecommendationIn, user: CurrentUser, session: DbSession) -> RecommendationOut:
-    place = Place(name=body.name, address=body.address, lat=body.lat, lon=body.lon, created_by=user.id)
+    place = Place(
+        name=body.name,
+        address=body.address,
+        lat=body.lat,
+        lon=body.lon,
+        created_by=user.id,
+        point_corrected=body.point_corrected,
+    )
     session.add(place)
     session.flush()
     rec = Recommendation(author_id=user.id, place_id=place.id, text=body.text)

@@ -41,6 +41,7 @@ class RecommendationIn(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     text: str = Field(min_length=1, max_length=2000)
+    point_corrected: bool = False
 
 
 class GeocodeIn(BaseModel):

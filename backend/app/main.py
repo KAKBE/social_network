@@ -6,9 +6,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import router
 from app.config import settings
-from app.db import Base, engine
+from app.migrations import assert_schema_current
 
-Base.metadata.create_all(engine)
+assert_schema_current()
 
 app = FastAPI(title="По Следу — рабочий образец")
 
