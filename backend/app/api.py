@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -54,6 +54,7 @@ from app.schemas import (
     PhotoOut,
     PlaceOut,
     RecommendationIn,
+    RecommendationUpdate,
     RecommendationOut,
     ReverseIn,
     ReverseOut,
@@ -223,8 +224,30 @@ def photos_by_recommendation(session: Session, recommendation_ids: list[int]) ->
     return grouped
 
 
+def audience_names(session: Session, viewer_id: int, rows: list[Recommendation]) -> dict[int, list[str]]:
+    """Only the author receives the allow or deny list. Other viewers get an empty list."""
+    own_ids = [row.id for row in rows if row.author_id == viewer_id and row.visibility in {"allow", "deny"}]
+    names: dict[int, list[str]] = {row.id: [] for row in rows}
+    if not own_ids:
+        return names
+    pairs = session.execute(
+        select(RecommendationAudience.recommendation_id, User.username)
+        .join(User, User.id == RecommendationAudience.user_id)
+        .where(RecommendationAudience.recommendation_id.in_(own_ids))
+        .order_by(User.username)
+    ).all()
+    for recommendation_id, username in pairs:
+        names.setdefault(recommendation_id, []).append(username)
+    return names
+
+
 def to_recommendation_out(
-    rec: Recommendation, viewer_id: int, liked: bool, like_count: int, photos: list[PhotoOut]
+    rec: Recommendation,
+    viewer_id: int,
+    liked: bool,
+    like_count: int,
+    photos: list[PhotoOut],
+    audience: list[str],
 ) -> RecommendationOut:
     return RecommendationOut(
         id=rec.id,
@@ -238,6 +261,7 @@ def to_recommendation_out(
         like_count=like_count,
         status=rec.status,
         photos=photos,
+        audience=audience,
     )
 
 
@@ -245,8 +269,11 @@ def recommendation_outs(session: Session, viewer_id: int, rows: list[Recommendat
     ids = [row.id for row in rows]
     liked, counts = like_state(session, viewer_id, ids)
     photos = photos_by_recommendation(session, ids)
+    audience = audience_names(session, viewer_id, rows)
     return [
-        to_recommendation_out(row, viewer_id, row.id in liked, counts.get(row.id, 0), photos.get(row.id, []))
+        to_recommendation_out(
+            row, viewer_id, row.id in liked, counts.get(row.id, 0), photos.get(row.id, []), audience.get(row.id, [])
+        )
         for row in rows
     ]
 
@@ -616,6 +643,63 @@ def publish_recommendation(recommendation_id: int, user: CurrentUser, session: D
     row.publish_at = None
     session.commit()
     return recommendation_outs(session, user.id, [row])[0]
+
+
+def author_recommendation(session: Session, recommendation_id: int, user: User) -> Recommendation:
+    row = visible_recommendation(session, recommendation_id, user)
+    if row.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Меняет автор")
+    return row
+
+
+@router.patch("/recommendations/{recommendation_id}")
+def update_recommendation(
+    recommendation_id: int, body: RecommendationUpdate, user: CurrentUser, session: DbSession
+) -> RecommendationOut:
+    row = author_recommendation(session, recommendation_id, user)
+    if body.visibility in {"friends", "close"} and body.audience:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Список нужен только для выбранных пользователей")
+    selected = audience_friends(session, user, body.audience) if body.visibility in {"allow", "deny"} else []
+    row.text = body.text
+    row.place.name = body.name
+    row.visibility = body.visibility
+    session.execute(delete(RecommendationAudience).where(RecommendationAudience.recommendation_id == row.id))
+    session.flush()
+    for friend in selected:
+        session.add(RecommendationAudience(recommendation_id=row.id, user_id=friend.id))
+    session.commit()
+    return recommendation_outs(session, user.id, [row])[0]
+
+
+def remove_photo_file(name: str) -> None:
+    if "/" in name or "\\" in name or ".." in name:
+        return
+    directory = photo_dir().resolve()
+    path = (directory / name).resolve()
+    if path.parent == directory and path.is_file():
+        path.unlink()
+
+
+@router.delete("/recommendations/{recommendation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_recommendation(recommendation_id: int, user: CurrentUser, session: DbSession) -> Response:
+    row = author_recommendation(session, recommendation_id, user)
+    photos = session.scalars(
+        select(RecommendationPhoto.stored_name).where(RecommendationPhoto.recommendation_id == row.id)
+    ).all()
+    place = row.place
+    others = session.scalar(
+        select(func.count())
+        .select_from(Recommendation)
+        .where(Recommendation.place_id == place.id, Recommendation.id != row.id)
+    )
+    session.delete(row)
+    session.flush()
+    if not others:
+        session.delete(place)
+    session.commit()
+    for name in photos:
+        remove_photo_file(name)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/recommendations/{recommendation_id}/like")

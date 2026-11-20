@@ -184,6 +184,7 @@ class RecommendationOut(BaseModel):
     like_count: int
     status: str
     photos: list[PhotoOut] = Field(default_factory=list)
+    audience: list[str] = Field(default_factory=list)
 
 
 class RecommendationIn(BaseModel):
@@ -214,6 +215,29 @@ class RecommendationIn(BaseModel):
         value = " ".join(value.split())
         if any(ch in "<>" for ch in value):
             raise ValueError("Некорректный город")
+        return value
+
+
+class RecommendationUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=2000)
+    visibility: Literal["friends", "close", "allow", "deny"] = "friends"
+    audience: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("name", "text")
+    @classmethod
+    def filled_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Заполните поле")
+        return value
+
+    @field_validator("audience")
+    @classmethod
+    def plain_usernames(cls, value: list[str]) -> list[str]:
+        for name in value:
+            if not LOGIN_PATTERN.fullmatch(name):
+                raise ValueError("Некорректное имя пользователя")
         return value
 
 

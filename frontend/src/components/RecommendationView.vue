@@ -6,12 +6,19 @@ const props = defineProps({
   item: { type: Object, required: true },
   lists: { type: Array, required: true },
 });
-const emit = defineEmits(["back", "liked", "seen", "to-list"]);
+const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted"]);
 
 const current = ref(props.item);
 const profile = ref(null);
 const error = ref("");
 const photoUrls = ref([]);
+const editing = ref(false);
+const busy = ref(false);
+const friends = ref([]);
+const name = ref("");
+const text = ref("");
+const visibility = ref("friends");
+const audience = ref([]);
 
 function revokePhotos() {
   for (const url of photoUrls.value) URL.revokeObjectURL(url);
@@ -93,6 +100,52 @@ async function addPhoto(event) {
   }
 }
 
+async function startEdit() {
+  error.value = "";
+  name.value = current.value.place.name;
+  text.value = current.value.text;
+  visibility.value = current.value.visibility;
+  audience.value = [...(current.value.audience ?? [])];
+  editing.value = true;
+  try {
+    friends.value = await api.friends();
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
+async function saveEdit() {
+  error.value = "";
+  busy.value = true;
+  try {
+    current.value = await api.updateRecommendation(current.value.id, {
+      name: name.value.trim(),
+      text: text.value.trim(),
+      visibility: visibility.value,
+      audience: visibility.value === "allow" || visibility.value === "deny" ? audience.value : [],
+    });
+    editing.value = false;
+    emit("liked", current.value);
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function remove() {
+  if (!window.confirm("Удалить рекомендацию? В списках других людей останется только место.")) return;
+  error.value = "";
+  busy.value = true;
+  try {
+    await api.deleteRecommendation(current.value.id);
+    emit("deleted", current.value.id);
+  } catch (err) {
+    error.value = err.message;
+    busy.value = false;
+  }
+}
+
 async function openAuthor() {
   error.value = "";
   try {
@@ -106,9 +159,33 @@ async function openAuthor() {
 <template>
   <section class="page">
     <button class="link" @click="emit('back')">Назад</button>
-    <h2>{{ current.place.name }}</h2>
-    <p v-if="current.place.address" class="muted">{{ current.place.address }}</p>
-    <p v-if="current.text">{{ current.text }}</p>
+    <form v-if="editing" class="stack" @submit.prevent="saveEdit">
+      <label>Название <input v-model="name" maxlength="200" required /></label>
+      <label>Рекомендация <textarea v-model="text" rows="4" maxlength="2000" required /></label>
+      <label>
+        Кто видит
+        <select v-model="visibility">
+          <option value="friends">Друзья</option>
+          <option value="close">Близкие друзья</option>
+          <option value="allow">Только выбранные друзья</option>
+          <option value="deny">Все друзья, кроме выбранных</option>
+        </select>
+      </label>
+      <fieldset v-if="visibility === 'allow' || visibility === 'deny'">
+        <legend>Друзья</legend>
+        <label v-for="friend in friends" :key="friend.id">
+          <input v-model="audience" type="checkbox" :value="friend.username" />
+          {{ friend.display_name }} @{{ friend.username }}
+        </label>
+      </fieldset>
+      <button :disabled="busy">Сохранить</button>
+      <button type="button" class="link" @click="editing = false">Отмена</button>
+    </form>
+    <template v-else>
+      <h2>{{ current.place.name }}</h2>
+      <p v-if="current.place.address" class="muted">{{ current.place.address }}</p>
+      <p v-if="current.text">{{ current.text }}</p>
+    </template>
     <div v-if="photoUrls.length" class="photo-row">
       <img v-for="url in photoUrls" :key="url" :src="url" alt="Фото места" />
     </div>
@@ -120,6 +197,8 @@ async function openAuthor() {
       <button class="link" @click="openAuthor">{{ current.author.display_name }}</button>
       <span class="muted"> @{{ current.author.username }}</span>
     </p>
+    <button v-if="current.is_own && !editing" @click="startEdit">Изменить</button>
+    <button v-if="current.is_own && !editing" :disabled="busy" @click="remove">Удалить</button>
     <button v-if="current.is_own && current.status === 'draft'" @click="publish">Опубликовать</button>
     <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
     <article v-if="profile" class="card">

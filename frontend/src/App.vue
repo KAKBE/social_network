@@ -55,9 +55,14 @@ function logout() {
   unseen.value = [];
   unseenReady.value = false;
   lists.value = [];
+  friendOptions.value = [];
+  cityFilter.value = "";
+  authorFilter.value = "";
   selected.value = null;
   opened.value = null;
   pendingPlace.value = null;
+  tab.value = "map";
+  lastPerf.value = null;
   document.documentElement.dataset.theme = "dark";
 }
 
@@ -182,9 +187,30 @@ async function applyFeedFilters() {
   await ensureUnseen();
 }
 
-function onLiked(item) {
+async function onLiked(item) {
   opened.value = item;
   feed.value = feed.value.map((row) => (row.id === item.id ? item : row));
+  unseen.value = unseen.value.map((row) => (row.id === item.id ? item : row));
+  if (selected.value?.id === item.id) selected.value = item;
+  try {
+    lists.value = await api.lists();
+  } catch (e) {
+    flash(e.message);
+  }
+}
+
+async function onDeleted(id) {
+  feed.value = feed.value.filter((row) => row.id !== id);
+  unseen.value = unseen.value.filter((row) => row.id !== id);
+  if (selected.value?.id === id) selected.value = null;
+  if (opened.value?.id === id) opened.value = null;
+  tab.value = "feed";
+  try {
+    lists.value = await api.lists();
+  } catch (e) {
+    flash(e.message);
+  }
+  flash("Рекомендация удалена");
 }
 
 function showOnMap(place) {
@@ -289,6 +315,7 @@ onMounted(() => {
         :lists="lists"
         @back="tab = 'feed'"
         @liked="onLiked"
+        @deleted="onDeleted"
         @seen="onSeen"
         @to-list="openListPicker"
       />

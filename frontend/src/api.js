@@ -106,6 +106,8 @@ export const api = {
     return request("GET", `/api/feed?${params}`);
   },
   recommendation: (id) => request("GET", `/api/recommendations/${id}`),
+  updateRecommendation: (id, body) => request("PATCH", `/api/recommendations/${id}`, body),
+  deleteRecommendation: (id) => request("DELETE", `/api/recommendations/${id}`),
   publishRecommendation: (id) => request("POST", `/api/recommendations/${id}/publish`),
   toggleLike: (id) => request("POST", `/api/recommendations/${id}/like`),
   uploadRecommendationPhoto: (id, file) => {
