@@ -604,6 +604,19 @@ def recommendation_page(recommendation_id: int, user: CurrentUser, session: DbSe
     return recommendation_outs(session, user.id, [row])[0]
 
 
+@router.post("/recommendations/{recommendation_id}/publish")
+def publish_recommendation(recommendation_id: int, user: CurrentUser, session: DbSession) -> RecommendationOut:
+    row = visible_recommendation(session, recommendation_id, user)
+    if row.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Публикует автор")
+    if row.status != "draft":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Это не черновик")
+    row.status = "published"
+    row.publish_at = None
+    session.commit()
+    return recommendation_outs(session, user.id, [row])[0]
+
+
 @router.post("/recommendations/{recommendation_id}/like")
 def toggle_like(recommendation_id: int, user: CurrentUser, session: DbSession) -> RecommendationOut:
     row = session.scalar(

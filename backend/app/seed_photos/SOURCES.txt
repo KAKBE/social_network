@@ -43,15 +43,15 @@ exhibit.jpg
   page: https://commons.wikimedia.org/wiki/File:Melaka_Art_Gallery_-_Exhibition_Hall.jpg
 
 bar.jpg
-  title: Bar interior
-  author: Unsplash contributor
-  license: Unsplash License
-  terms: https://unsplash.com/license
-  page: https://unsplash.com/photos/1514933651103-005eec06c04b
+  title: Villa Marina bar interior, Newport Beach
+  author: Orange County Archives
+  license: CC BY
+  terms: https://www.flickr.com/photos/ocarchives/9493707907
+  page: https://www.flickr.com/photos/ocarchives/9493707907
 
 anticafe.jpg
-  title: Board game on a table
-  author: Unsplash contributor
-  license: Unsplash License
-  terms: https://unsplash.com/license
-  page: https://unsplash.com/photos/1610890716171-6b1bb98ffd09
+  title: Board game collection
+  author: Average Jane
+  license: CC BY 2.0
+  terms: https://creativecommons.org/licenses/by/2.0/
+  page: https://www.flickr.com/photos/64401168@N00/7173196970

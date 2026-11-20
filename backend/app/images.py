@@ -53,7 +53,10 @@ def _jpeg_size(data: bytes) -> tuple[int, int]:
             break
         length = struct.unpack(">H", data[index : index + 2])[0]
         if marker in (0xC0, 0xC1, 0xC2):
-            height, width = struct.unpack(">HH", data[index + 3 : index + 7])
+            try:
+                height, width = struct.unpack(">HH", data[index + 3 : index + 7])
+            except struct.error:
+                raise ImageRejected("Повреждённый JPEG") from None
             return width, height
         index += length
     raise ImageRejected("Не удалось прочитать размер JPEG")

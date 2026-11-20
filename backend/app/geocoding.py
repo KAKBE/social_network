@@ -37,6 +37,11 @@ def city_from_address(address: object) -> str:
     return ""
 
 
+def cache_has_city(results: list) -> bool:
+    """Rows saved before city was stored have no city key and must be fetched again."""
+    return bool(results) and all(isinstance(item, dict) and "city" in item for item in results)
+
+
 def cached_result(item: dict) -> GeocodeResult:
     return GeocodeResult(
         display_name=item["display_name"],
@@ -106,7 +111,7 @@ class NominatimGeocoder:
         """Returns results and whether they came from the cache."""
         key = normalize_query(query)
         cached = session.get(GeocodeCacheEntry, key)
-        if cached is not None:
+        if cached is not None and cache_has_city(cached.results):
             return [cached_result(item) for item in cached.results], True
         results = self.fetch(query)
         session.merge(GeocodeCacheEntry(query=key, results=[asdict(r) for r in results]))
@@ -147,7 +152,7 @@ class NominatimGeocoder:
     def reverse(self, session: Session, lat: float, lon: float) -> tuple[str, str, bool]:
         key = f"reverse:{lat:.5f},{lon:.5f}"
         cached = session.get(GeocodeCacheEntry, key)
-        if cached is not None:
+        if cached is not None and (not cached.results or cache_has_city(cached.results)):
             item = cached.results[0] if cached.results else {}
             return item.get("display_name", ""), str(item.get("city") or ""), True
         result = self.fetch_reverse(lat, lon)

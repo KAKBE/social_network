@@ -26,6 +26,7 @@ const user = ref(null);
 const config = ref(null);
 const feed = ref([]);
 const unseen = ref([]);
+const unseenReady = ref(false);
 const cityFilter = ref("");
 const authorFilter = ref("");
 const friendOptions = ref([]);
@@ -51,6 +52,7 @@ function logout() {
   user.value = null;
   feed.value = [];
   unseen.value = [];
+  unseenReady.value = false;
   lists.value = [];
   selected.value = null;
   opened.value = null;
@@ -73,21 +75,18 @@ function onProfileSaved(me) {
 async function load() {
   loadError.value = "";
   try {
-    const [cfg, me, feedResponse, myLists, unseenRows, myFriends] = await Promise.all([
+    const [cfg, me, feedResponse, myLists] = await Promise.all([
       api.config(),
       api.me(),
       api.feedWithTiming(),
       api.lists(),
-      api.unseenFeed(),
-      api.friends(),
     ]);
     feedServerMs = feedResponse.serverMs;
     config.value = cfg;
     user.value = me;
     feed.value = feedResponse.data;
-    unseen.value = unseenRows;
-    friendOptions.value = myFriends;
     lists.value = myLists;
+    if (tab.value === "feed") await ensureUnseen();
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) logout();
     else loadError.value = `Не удалось загрузить данные: ${e.message}`;
@@ -146,12 +145,26 @@ function onSeen(id) {
   unseen.value = unseen.value.filter((row) => row.id !== id);
 }
 
-async function applyFeedFilters() {
+async function ensureUnseen() {
   try {
-    unseen.value = await api.unseenFeed({ city: cityFilter.value.trim(), author: authorFilter.value });
+    const [rows, myFriends] = await Promise.all([
+      api.unseenFeed({ city: cityFilter.value.trim(), author: authorFilter.value }),
+      friendOptions.value.length ? Promise.resolve(friendOptions.value) : api.friends(),
+    ]);
+    unseen.value = rows;
+    friendOptions.value = myFriends;
+    unseenReady.value = true;
   } catch (e) {
     flash(e.message);
   }
+}
+
+watch(tab, (value) => {
+  if (value === "feed") ensureUnseen();
+});
+
+async function applyFeedFilters() {
+  await ensureUnseen();
 }
 
 function onLiked(item) {
@@ -168,7 +181,9 @@ function showOnMap(place) {
 
 function onCreated(rec) {
   feed.value = [rec, ...feed.value];
-  flash("Рекомендация опубликована для друзей");
+  if (rec.status === "draft") flash("Черновик сохранён");
+  else if (rec.publish_at && new Date(rec.publish_at) > new Date()) flash("Рекомендация запланирована");
+  else flash("Рекомендация опубликована");
   showOnMap(rec.place);
 }
 
@@ -233,7 +248,7 @@ onMounted(() => {
           </select>
           <button>Показать</button>
         </form>
-        <button v-if="!unseen.length" class="link empty-feed" @click="tab = 'add'">
+        <button v-if="unseenReady && !unseen.length" class="link empty-feed" @click="tab = 'add'">
           Рекомендаций нет, но вы можете добавить свою
         </button>
         <RecommendationCard
@@ -253,6 +268,7 @@ onMounted(() => {
       <SearchView v-show="tab === 'search'" />
       <RecommendationView
         v-if="opened"
+        :key="opened.id"
         v-show="tab === 'recommendation'"
         :item="opened"
         :lists="lists"

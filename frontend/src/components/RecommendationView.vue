@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api.js";
 
 const props = defineProps({
@@ -41,23 +41,35 @@ watch(
 
 onBeforeUnmount(revokePhotos);
 
-onMounted(async () => {
+async function openPage(item) {
+  current.value = item;
+  profile.value = null;
+  error.value = "";
   try {
-    current.value = await api.recommendation(current.value.id);
-    emit("seen", current.value.id);
+    current.value = await api.recommendation(item.id);
+    emit("seen", item.id);
   } catch (err) {
     error.value = err.message;
   }
-});
+}
 
 watch(
-  () => props.item,
-  (item) => {
-    current.value = item;
-    profile.value = null;
-    error.value = "";
+  () => props.item.id,
+  () => {
+    openPage(props.item);
   },
+  { immediate: true },
 );
+
+async function publish() {
+  error.value = "";
+  try {
+    current.value = await api.publishRecommendation(current.value.id);
+    emit("liked", current.value);
+  } catch (err) {
+    error.value = err.message;
+  }
+}
 
 async function like() {
   error.value = "";
@@ -109,6 +121,7 @@ async function openAuthor() {
       <button class="link" @click="openAuthor">{{ current.author.display_name }}</button>
       <span class="muted"> @{{ current.author.username }}</span>
     </p>
+    <button v-if="current.is_own && current.status === 'draft'" @click="publish">Опубликовать</button>
     <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
     <article v-if="profile" class="card">
       <h3>{{ profile.display_name }}</h3>

@@ -96,3 +96,46 @@ def test_draft_schedule_list_and_reverse(monkeypatch) -> None:
     assert first.json()["cached"] is False
     second = client.post("/api/geocode/reverse", json={"lat": 55.751, "lon": 37.618}, headers=lesha)
     assert second.json()["cached"] is True
+
+
+def test_author_can_publish_a_draft() -> None:
+    reset_and_seed()
+    client = api()
+    lesha = login(client, "lesha")
+    anya = login(client, "anya")
+    draft = client.post(
+        "/api/recommendations",
+        json={"name": "Позже", "lat": 55.75, "lon": 37.61, "text": "Сначала черновик", "draft": True},
+        headers=lesha,
+    )
+    assert draft.status_code == 201, draft.text
+    rec_id = draft.json()["id"]
+    hidden = client.post(f"/api/recommendations/{rec_id}/publish", headers=anya)
+    assert hidden.status_code == 404
+    published = client.post(f"/api/recommendations/{rec_id}/publish", headers=lesha)
+    assert published.status_code == 200, published.text
+    assert published.json()["status"] == "published"
+    assert rec_id in ids(client, anya)
+    again = client.post(f"/api/recommendations/{rec_id}/publish", headers=lesha)
+    assert again.status_code == 422
+
+
+def test_geocode_cache_without_city_is_refetched(monkeypatch) -> None:
+    reset_and_seed()
+    client = api()
+    lesha = login(client, "lesha")
+    with SessionLocal() as session:
+        session.merge(
+            GeocodeCacheEntry(query="москва точка", results=[{"display_name": "старый", "lat": 55.7, "lon": 37.6}])
+        )
+        session.commit()
+
+    def fake_fetch(query: str) -> list[GeocodeResult]:
+        return [GeocodeResult(display_name="Москва, новая", lat=55.75, lon=37.62, city="Москва")]
+
+    monkeypatch.setattr(geocoder, "fetch", fake_fetch)
+    response = client.post("/api/geocode", json={"query": "Москва точка"}, headers=lesha)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cached"] is False
+    assert body["results"][0]["city"] == "Москва"
