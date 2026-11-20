@@ -41,7 +41,7 @@ function stop() {
     </template>
     <form v-else class="search" @submit.prevent="start">
       <input v-model="name" placeholder="Название серии, например phone-wifi-1" />
-      <button>Начать</button>
+      <button class="primary">Начать</button>
     </form>
     <p class="small muted">Выгрузка всех замеров: <a href="/api/perf.csv" target="_blank">/api/perf.csv</a></p>
   </div>

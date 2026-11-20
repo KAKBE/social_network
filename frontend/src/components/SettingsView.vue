@@ -125,7 +125,7 @@ onBeforeUnmount(() => {
           <option value="light">Светлая</option>
         </select>
       </label>
-      <button :disabled="busy">Сохранить настройки</button>
+      <button class="primary" :disabled="busy">Сохранить настройки</button>
     </form>
 
     <h2>Пароль</h2>

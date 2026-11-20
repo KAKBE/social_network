@@ -224,7 +224,7 @@ watch(
         Фото, до 5
         <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple @change="onFiles" />
       </label>
-      <button :disabled="saving">{{ draft ? "Сохранить черновик" : "Опубликовать" }}</button>
+      <button class="primary" :disabled="saving">{{ draft ? "Сохранить черновик" : "Опубликовать" }}</button>
       <p v-if="error" class="error">{{ error }}</p>
     </form>
   </section>

@@ -61,7 +61,7 @@ async function submit() {
       <p v-if="mode === 'register'" class="muted small">
         От 12 символов: заглавные и строчные буквы, цифра и специальный символ.
       </p>
-      <button :disabled="busy">{{ mode === "login" ? "Войти" : "Создать аккаунт" }}</button>
+      <button class="primary" :disabled="busy">{{ mode === "login" ? "Войти" : "Создать аккаунт" }}</button>
       <p v-if="error" class="error">{{ error }}</p>
     </form>
     <button v-if="mode === 'login'" class="link" type="button" @click="switchMode('register')">Зарегистрироваться</button>

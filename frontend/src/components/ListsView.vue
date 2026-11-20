@@ -33,9 +33,9 @@ function create() {
     <p v-if="pending && !lists.length" class="muted">Списков нет. Создайте список, выберите его и нажмите «Добавить».</p>
     <form class="search" @submit.prevent="create">
       <input v-model="title" maxlength="100" placeholder="Новый список, например «Свидания»" />
-      <button>Создать</button>
+      <button :class="{ primary: !pending }">Создать</button>
     </form>
-    <button v-if="pending && selectedId" @click="emit('add', selectedId)">Добавить</button>
+    <button v-if="pending && selectedId" class="primary" @click="emit('add', selectedId)">Добавить</button>
     <article v-for="l in lists" :key="l.id" class="card">
       <h3>
         <button v-if="pending" class="link" type="button" @click="selectedId = l.id">

@@ -178,7 +178,7 @@ async function openAuthor() {
           {{ friend.display_name }} @{{ friend.username }}
         </label>
       </fieldset>
-      <button :disabled="busy">Сохранить</button>
+      <button class="primary" :disabled="busy">Сохранить</button>
       <button type="button" class="link" @click="editing = false">Отмена</button>
     </form>
     <template v-else>
@@ -197,17 +197,19 @@ async function openAuthor() {
       <button class="link" @click="openAuthor">{{ current.author.display_name }}</button>
       <span class="muted"> @{{ current.author.username }}</span>
     </p>
-    <button v-if="current.is_own && !editing" @click="startEdit">Изменить</button>
-    <button v-if="current.is_own && !editing" :disabled="busy" @click="remove">Удалить</button>
-    <button v-if="current.is_own && current.status === 'draft'" @click="publish">Опубликовать</button>
-    <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
+    <div class="actions">
+      <button v-if="current.is_own && !editing" @click="startEdit">Изменить</button>
+      <button v-if="current.is_own && !editing" class="danger" :disabled="busy" @click="remove">Удалить</button>
+      <button v-if="current.is_own && !editing && current.status === 'draft'" class="primary" @click="publish">Опубликовать</button>
+      <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
+      <button @click="emit('to-list', current.place)">В список</button>
+    </div>
     <article v-if="profile" class="card">
       <h3>{{ profile.display_name }}</h3>
       <p class="muted">@{{ profile.username }}</p>
       <p v-if="profile.bio">{{ profile.bio }}</p>
       <p v-else class="muted">Описание скрыто или не заполнено.</p>
     </article>
-    <button @click="emit('to-list', current.place)">В список</button>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 </template>

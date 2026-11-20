@@ -237,14 +237,14 @@ onMounted(() => {
   <LoginView v-if="!user && !getToken()" @logged-in="onLoggedIn" />
   <div v-else-if="loadError" class="login">
     <p class="error">{{ loadError }}</p>
-    <button @click="load">Повторить</button>
+    <button class="primary" @click="load">Повторить</button>
   </div>
   <div v-else-if="!user || !config" class="login"><p class="muted">Загрузка…</p></div>
   <div v-else class="app">
     <header class="topbar">
       <strong>По Следу</strong>
       <button class="badge" @click="perfOpen = !perfOpen">
-        {{ lastPerf ? `${lastPerf.markers} мест · ${lastPerf.total_ms} мс` : `${feed.length} рек.` }}
+        {{ feed.length }} рек.
       </button>
       <span class="topbar-actions">
         <button class="link small" @click="tab = 'search'">Поиск</button>
@@ -287,7 +287,7 @@ onMounted(() => {
               {{ friend.display_name }}
             </option>
           </select>
-          <button>Показать</button>
+          <button class="primary">Показать</button>
         </form>
         <button v-if="unseenReady && !unseen.length" class="link empty-feed" @click="tab = 'add'">
           Рекомендаций нет, но вы можете добавить свою

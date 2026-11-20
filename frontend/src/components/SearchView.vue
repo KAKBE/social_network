@@ -110,7 +110,7 @@ async function reject(request) {
     <h2>Поиск</h2>
     <form class="stack" @submit.prevent="search">
       <label>Username <input v-model="query" autocapitalize="none" maxlength="50" required /></label>
-      <button :disabled="busy">Найти</button>
+      <button :class="{ primary: !requests.length }" :disabled="busy">Найти</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -142,7 +142,7 @@ async function reject(request) {
     <p v-if="!requests.length" class="muted">Заявок нет.</p>
     <article v-for="request in requests" :key="request.id" class="card">
       <p>{{ request.display_name }} <span class="muted">@{{ request.username }}</span></p>
-      <button @click="accept(request)">Принять</button>
+      <button class="primary" @click="accept(request)">Принять</button>
       <button @click="reject(request)">Отклонить</button>
     </article>
   </section>
