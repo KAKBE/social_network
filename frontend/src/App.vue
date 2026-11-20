@@ -34,6 +34,7 @@ const lists = ref([]);
 const tab = ref("map");
 const selected = ref(null);
 const opened = ref(null);
+const pendingPlace = ref(null);
 const focus = ref(null);
 const notice = ref("");
 const loadError = ref("");
@@ -56,6 +57,7 @@ function logout() {
   lists.value = [];
   selected.value = null;
   opened.value = null;
+  pendingPlace.value = null;
   document.documentElement.dataset.theme = "dark";
 }
 
@@ -118,13 +120,26 @@ async function saveToList(listId, placeId) {
     const updated = await api.addToList(listId, placeId);
     upsertList(updated);
     flash(`Сохранено в «${updated.title}»`);
+    return true;
   } catch (e) {
     flash(e.message);
+    return false;
   }
 }
 
-async function removeFromList(listId, placeId) {
-  upsertList(await api.removeFromList(listId, placeId));
+async function removeFromList(listId, itemId) {
+  upsertList(await api.removeFromList(listId, itemId));
+}
+
+function openListPicker(place) {
+  pendingPlace.value = place;
+  tab.value = "lists";
+}
+
+async function confirmListAdd(listId) {
+  if (!pendingPlace.value?.id) return;
+  const saved = await saveToList(listId, pendingPlace.value.id);
+  if (saved) pendingPlace.value = null;
 }
 
 async function createList(title) {
@@ -173,7 +188,7 @@ function onLiked(item) {
 }
 
 function showOnMap(place) {
-  const item = feed.value.find((i) => i.place.id === place.id);
+  const item = !place.limited && place.id ? feed.value.find((i) => i.place.id === place.id) : null;
   selected.value = item ?? null;
   focus.value = { lat: place.lat, lon: place.lon, at: Date.now() };
   tab.value = "map";
@@ -229,7 +244,7 @@ onMounted(() => {
             :item="selected"
             :lists="lists"
             closable
-            @save="saveToList"
+            @to-list="openListPicker"
             @open="openRecommendation(selected)"
             @close="selected = null"
           />
@@ -257,7 +272,7 @@ onMounted(() => {
           :item="item"
           :lists="lists"
           show-map-button
-          @save="saveToList"
+          @to-list="openListPicker"
           @open="openRecommendation(item)"
           @show-on-map="showOnMap($event.place)"
         />
@@ -275,14 +290,16 @@ onMounted(() => {
         @back="tab = 'feed'"
         @liked="onLiked"
         @seen="onSeen"
-        @save="saveToList"
+        @to-list="openListPicker"
       />
       <SettingsView v-show="tab === 'settings'" :user="user" @saved="onProfileSaved" />
 
       <ListsView
         v-show="tab === 'lists'"
         :lists="lists"
+        :pending="pendingPlace"
         @create="createList"
+        @add="confirmListAdd"
         @remove="removeFromList"
         @show-on-map="showOnMap"
       />

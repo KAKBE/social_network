@@ -8,9 +8,8 @@ const props = defineProps({
   showMapButton: { type: Boolean, default: false },
   closable: { type: Boolean, default: false },
 });
-const emit = defineEmits(["save", "show-on-map", "close", "open"]);
+const emit = defineEmits(["show-on-map", "close", "open", "to-list"]);
 
-const listId = ref(props.lists[0]?.id ?? null);
 const savedIn = computed(() =>
   props.lists.filter((l) => l.places.some((p) => p.id === props.item.place.id)).map((l) => l.title),
 );
@@ -63,12 +62,7 @@ onBeforeUnmount(releasePhoto);
     <div class="card-actions">
       <button class="secondary" @click="emit('open')">Открыть</button>
       <button v-if="showMapButton" class="secondary" @click="emit('show-on-map', item)">На карте</button>
-      <template v-if="lists.length">
-        <select v-model="listId" aria-label="Список">
-          <option v-for="l in lists" :key="l.id" :value="l.id">{{ l.title }}</option>
-        </select>
-        <button @click="emit('save', listId, item.place.id)">Сохранить</button>
-      </template>
+      <button @click="emit('to-list', item.place)">В список</button>
     </div>
   </article>
 </template>

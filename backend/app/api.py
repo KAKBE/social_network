@@ -50,6 +50,7 @@ from app.schemas import (
     RegisterIn,
     PlaceListIn,
     PlaceListOut,
+    SavedPlaceOut,
     PhotoOut,
     PlaceOut,
     RecommendationIn,
@@ -754,8 +755,10 @@ def create_recommendation(body: RecommendationIn, user: CurrentUser, session: Db
     session.flush()
     for friend in selected:
         session.add(RecommendationAudience(recommendation_id=rec.id, user_id=friend.id))
-    if place_list is not None and session.get(PlaceListItem, (place_list.id, place.id)) is None:
-        session.add(PlaceListItem(list_id=place_list.id, place_id=place.id))
+    if place_list is not None and session.scalar(
+        select(PlaceListItem).where(PlaceListItem.list_id == place_list.id, PlaceListItem.place_id == place.id)
+    ) is None:
+        session.add(saved_place_item(place_list.id, place))
     session.commit()
     session.refresh(rec, ["author", "place"])
     return recommendation_outs(session, user.id, [rec])[0]
@@ -790,14 +793,64 @@ def reverse_geocode(body: ReverseIn, user: CurrentUser, session: DbSession) -> R
     return ReverseOut(address=address, city=city, cached=cached)
 
 
-def load_list_out(session: Session, place_list: PlaceList) -> PlaceListOut:
+def saved_place_item(list_id: int, place: Place) -> PlaceListItem:
+    return PlaceListItem(
+        list_id=list_id,
+        place_id=place.id,
+        name=place.name,
+        address=place.address,
+        lat=place.lat,
+        lon=place.lon,
+    )
+
+
+def place_still_visible(session: Session, user_id: int, place_id: int | None) -> bool:
+    if place_id is None:
+        return False
+    return (
+        session.scalar(
+            select(Place.id).where(Place.id == place_id, Place.id.in_(visible_place_ids_subquery(user_id)))
+        )
+        is not None
+    )
+
+
+def to_saved_place(session: Session, user_id: int, item: PlaceListItem) -> SavedPlaceOut:
+    if place_still_visible(session, user_id, item.place_id) and item.place is not None:
+        place = item.place
+        return SavedPlaceOut(
+            id=place.id,
+            item_id=item.id,
+            name=place.name,
+            address=place.address,
+            lat=place.lat,
+            lon=place.lon,
+            city=place.city,
+            limited=False,
+        )
+    return SavedPlaceOut(
+        id=item.place_id,
+        item_id=item.id,
+        name=item.name,
+        address=item.address,
+        lat=item.lat,
+        lon=item.lon,
+        limited=True,
+    )
+
+
+def load_list_out(session: Session, place_list: PlaceList, user: User) -> PlaceListOut:
     items = session.scalars(
         select(PlaceListItem)
         .options(joinedload(PlaceListItem.place))
         .where(PlaceListItem.list_id == place_list.id)
         .order_by(PlaceListItem.added_at.desc())
     )
-    return PlaceListOut(id=place_list.id, title=place_list.title, places=[to_place_out(i.place) for i in items])
+    return PlaceListOut(
+        id=place_list.id,
+        title=place_list.title,
+        places=[to_saved_place(session, user.id, item) for item in items],
+    )
 
 
 def owned_list(session: Session, list_id: int, user: User) -> PlaceList:
@@ -810,7 +863,7 @@ def owned_list(session: Session, list_id: int, user: User) -> PlaceList:
 @router.get("/lists")
 def lists(user: CurrentUser, session: DbSession) -> list[PlaceListOut]:
     rows = session.scalars(select(PlaceList).where(PlaceList.owner_id == user.id).order_by(PlaceList.id))
-    return [load_list_out(session, pl) for pl in rows]
+    return [load_list_out(session, pl, user) for pl in rows]
 
 
 @router.post("/lists", status_code=status.HTTP_201_CREATED)
@@ -819,25 +872,26 @@ def create_list(body: PlaceListIn, user: CurrentUser, session: DbSession) -> Pla
         select(PlaceList).where(PlaceList.owner_id == user.id, PlaceList.title == body.title)
     )
     if existing is not None:
-        return load_list_out(session, existing)
+        return load_list_out(session, existing, user)
     place_list = PlaceList(owner_id=user.id, title=body.title)
     session.add(place_list)
     session.commit()
-    return load_list_out(session, place_list)
+    return load_list_out(session, place_list, user)
 
 
 @router.post("/lists/{list_id}/places")
 def add_place_to_list(list_id: int, body: AddPlaceIn, user: CurrentUser, session: DbSession) -> PlaceListOut:
     place_list = owned_list(session, list_id, user)
-    visible = session.scalar(
-        select(Place.id).where(Place.id == body.place_id, Place.id.in_(visible_place_ids_subquery(user.id)))
-    )
-    if visible is None:
+    place = session.get(Place, body.place_id)
+    if place is None or not place_still_visible(session, user.id, place.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Место не найдено")
-    if session.get(PlaceListItem, (place_list.id, body.place_id)) is None:
-        session.add(PlaceListItem(list_id=place_list.id, place_id=body.place_id))
+    existing = session.scalar(
+        select(PlaceListItem).where(PlaceListItem.list_id == place_list.id, PlaceListItem.place_id == place.id)
+    )
+    if existing is None:
+        session.add(saved_place_item(place_list.id, place))
         session.commit()
-    return load_list_out(session, place_list)
+    return load_list_out(session, place_list, user)
 
 
 @router.post("/perf", status_code=status.HTTP_204_NO_CONTENT)
@@ -878,8 +932,20 @@ def export_perf_samples(session: DbSession) -> Response:
 @router.delete("/lists/{list_id}/places/{place_id}")
 def remove_place_from_list(list_id: int, place_id: int, user: CurrentUser, session: DbSession) -> PlaceListOut:
     place_list = owned_list(session, list_id, user)
-    item = session.get(PlaceListItem, (place_list.id, place_id))
+    item = session.scalar(
+        select(PlaceListItem).where(PlaceListItem.list_id == place_list.id, PlaceListItem.place_id == place_id)
+    )
     if item is not None:
         session.delete(item)
         session.commit()
-    return load_list_out(session, place_list)
+    return load_list_out(session, place_list, user)
+
+
+@router.delete("/lists/{list_id}/items/{item_id}")
+def remove_saved_item(list_id: int, item_id: int, user: CurrentUser, session: DbSession) -> PlaceListOut:
+    place_list = owned_list(session, list_id, user)
+    item = session.get(PlaceListItem, item_id)
+    if item is not None and item.list_id == place_list.id:
+        session.delete(item)
+        session.commit()
+    return load_list_out(session, place_list, user)

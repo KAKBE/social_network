@@ -163,17 +163,21 @@ class PlaceList(Base):
 
 
 class PlaceListItem(Base):
-    __tablename__ = "place_list_items"
+    """A saved place. The name and point stay after the recommendation is hidden or deleted."""
 
-    list_id: Mapped[int] = mapped_column(
-        ForeignKey("place_lists.id", ondelete="CASCADE"), primary_key=True
-    )
-    place_id: Mapped[int] = mapped_column(
-        ForeignKey("places.id", ondelete="CASCADE"), primary_key=True
-    )
+    __tablename__ = "place_list_items"
+    __table_args__ = (UniqueConstraint("list_id", "place_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_id: Mapped[int] = mapped_column(ForeignKey("place_lists.id", ondelete="CASCADE"))
+    place_id: Mapped[int | None] = mapped_column(ForeignKey("places.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(200))
+    address: Mapped[str] = mapped_column(String(300), default="")
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    place: Mapped[Place] = relationship()
+    place: Mapped[Place | None] = relationship()
 
 
 class PerfSample(Base):

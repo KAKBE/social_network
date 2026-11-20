@@ -6,11 +6,10 @@ const props = defineProps({
   item: { type: Object, required: true },
   lists: { type: Array, required: true },
 });
-const emit = defineEmits(["back", "liked", "save", "seen"]);
+const emit = defineEmits(["back", "liked", "seen", "to-list"]);
 
 const current = ref(props.item);
 const profile = ref(null);
-const listId = ref(props.lists[0]?.id ?? null);
 const error = ref("");
 const photoUrls = ref([]);
 
@@ -129,15 +128,7 @@ async function openAuthor() {
       <p v-if="profile.bio">{{ profile.bio }}</p>
       <p v-else class="muted">Описание скрыто или не заполнено.</p>
     </article>
-    <form v-if="lists.length" class="stack" @submit.prevent="emit('save', listId, current.place.id)">
-      <label>
-        Список
-        <select v-model="listId" aria-label="Список">
-          <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.title }}</option>
-        </select>
-      </label>
-      <button>Добавить</button>
-    </form>
+    <button @click="emit('to-list', current.place)">В список</button>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 </template>

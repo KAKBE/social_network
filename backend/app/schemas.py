@@ -248,10 +248,21 @@ class PlaceListIn(BaseModel):
     title: str = Field(min_length=1, max_length=100)
 
 
+class SavedPlaceOut(BaseModel):
+    id: int | None
+    item_id: int
+    name: str
+    address: str
+    lat: float
+    lon: float
+    city: str = ""
+    limited: bool = False
+
+
 class PlaceListOut(BaseModel):
     id: int
     title: str
-    places: list[PlaceOut]
+    places: list[SavedPlaceOut]
 
 
 class AddPlaceIn(BaseModel):

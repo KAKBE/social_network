@@ -120,6 +120,6 @@ export const api = {
   lists: () => request("GET", "/api/lists"),
   createList: (title) => request("POST", "/api/lists", { title }),
   addToList: (listId, placeId) => request("POST", `/api/lists/${listId}/places`, { place_id: placeId }),
-  removeFromList: (listId, placeId) => request("DELETE", `/api/lists/${listId}/places/${placeId}`),
+  removeFromList: (listId, itemId) => request("DELETE", `/api/lists/${listId}/items/${itemId}`),
   sendPerf: (sample) => request("POST", "/api/perf", sample),
 };
