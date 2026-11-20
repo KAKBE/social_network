@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { api, ApiError, getToken, setToken } from "./api.js";
 import { getSeries, measureFirstRender } from "./perf.js";
 import LoginView from "./components/LoginView.vue";
@@ -7,6 +7,9 @@ import MapView from "./components/MapView.vue";
 import RecommendationCard from "./components/RecommendationCard.vue";
 import AddView from "./components/AddView.vue";
 import ListsView from "./components/ListsView.vue";
+import SettingsView from "./components/SettingsView.vue";
+import SearchView from "./components/SearchView.vue";
+import RecommendationView from "./components/RecommendationView.vue";
 import PerfPanel from "./components/PerfPanel.vue";
 
 const TABS = [
@@ -22,9 +25,14 @@ const measureThisLoad = Boolean(getToken());
 const user = ref(null);
 const config = ref(null);
 const feed = ref([]);
+const unseen = ref([]);
+const cityFilter = ref("");
+const authorFilter = ref("");
+const friendOptions = ref([]);
 const lists = ref([]);
 const tab = ref("map");
 const selected = ref(null);
+const opened = ref(null);
 const focus = ref(null);
 const notice = ref("");
 const loadError = ref("");
@@ -42,23 +50,43 @@ function logout() {
   setToken(null);
   user.value = null;
   feed.value = [];
+  unseen.value = [];
   lists.value = [];
   selected.value = null;
+  opened.value = null;
+  document.documentElement.dataset.theme = "dark";
+}
+
+watch(
+  user,
+  (value) => {
+    document.documentElement.dataset.theme = value?.theme === "light" ? "light" : "dark";
+  },
+  { immediate: true },
+);
+
+function onProfileSaved(me) {
+  user.value = me;
+  flash("Сохранено");
 }
 
 async function load() {
   loadError.value = "";
   try {
-    const [cfg, me, feedResponse, myLists] = await Promise.all([
+    const [cfg, me, feedResponse, myLists, unseenRows, myFriends] = await Promise.all([
       api.config(),
       api.me(),
       api.feedWithTiming(),
       api.lists(),
+      api.unseenFeed(),
+      api.friends(),
     ]);
     feedServerMs = feedResponse.serverMs;
     config.value = cfg;
     user.value = me;
     feed.value = feedResponse.data;
+    unseen.value = unseenRows;
+    friendOptions.value = myFriends;
     lists.value = myLists;
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) logout();
@@ -109,6 +137,28 @@ async function createList(title) {
   }
 }
 
+function openRecommendation(item) {
+  opened.value = item;
+  tab.value = "recommendation";
+}
+
+function onSeen(id) {
+  unseen.value = unseen.value.filter((row) => row.id !== id);
+}
+
+async function applyFeedFilters() {
+  try {
+    unseen.value = await api.unseenFeed({ city: cityFilter.value.trim(), author: authorFilter.value });
+  } catch (e) {
+    flash(e.message);
+  }
+}
+
+function onLiked(item) {
+  opened.value = item;
+  feed.value = feed.value.map((row) => (row.id === item.id ? item : row));
+}
+
 function showOnMap(place) {
   const item = feed.value.find((i) => i.place.id === place.id);
   selected.value = item ?? null;
@@ -140,7 +190,11 @@ onMounted(() => {
       <button class="badge" @click="perfOpen = !perfOpen">
         {{ lastPerf ? `${lastPerf.markers} мест · ${lastPerf.total_ms} мс` : `${feed.length} рек.` }}
       </button>
-      <button class="link small" @click="logout">{{ user.display_name }} · выйти</button>
+      <span class="topbar-actions">
+        <button class="link small" @click="tab = 'search'">Поиск</button>
+        <button class="link small" @click="tab = 'settings'">{{ user.display_name }}</button>
+        <button class="link small" @click="logout">выйти</button>
+      </span>
     </header>
 
     <main class="content">
@@ -151,6 +205,7 @@ onMounted(() => {
           :active="tab === 'map'"
           :focus="focus"
           @select="selected = $event"
+          @open="openRecommendation"
           @rendered="onMapRendered"
         />
         <div v-if="selected" class="map-card">
@@ -160,6 +215,7 @@ onMounted(() => {
             :lists="lists"
             closable
             @save="saveToList"
+            @open="openRecommendation(selected)"
             @close="selected = null"
           />
         </div>
@@ -167,19 +223,45 @@ onMounted(() => {
 
       <section v-show="tab === 'feed'" class="page">
         <h2>Рекомендации друзей</h2>
-        <p v-if="!feed.length" class="muted">Друзья пока ничего не рекомендовали.</p>
+        <form class="search" @submit.prevent="applyFeedFilters">
+          <input v-model="cityFilter" maxlength="120" aria-label="Город" placeholder="Город" />
+          <select v-model="authorFilter" aria-label="Автор">
+            <option value="">Все авторы</option>
+            <option v-for="friend in friendOptions" :key="friend.id" :value="friend.username">
+              {{ friend.display_name }}
+            </option>
+          </select>
+          <button>Показать</button>
+        </form>
+        <button v-if="!unseen.length" class="link empty-feed" @click="tab = 'add'">
+          Рекомендаций нет, но вы можете добавить свою
+        </button>
         <RecommendationCard
-          v-for="item in feed"
+          v-for="item in unseen"
           :key="item.id"
           :item="item"
           :lists="lists"
           show-map-button
           @save="saveToList"
+          @open="openRecommendation(item)"
           @show-on-map="showOnMap($event.place)"
         />
       </section>
 
       <AddView v-show="tab === 'add'" :config="config" :active="tab === 'add'" @created="onCreated" />
+
+      <SearchView v-show="tab === 'search'" />
+      <RecommendationView
+        v-if="opened"
+        v-show="tab === 'recommendation'"
+        :item="opened"
+        :lists="lists"
+        @back="tab = 'feed'"
+        @liked="onLiked"
+        @seen="onSeen"
+        @save="saveToList"
+      />
+      <SettingsView v-show="tab === 'settings'" :user="user" @saved="onProfileSaved" />
 
       <ListsView
         v-show="tab === 'lists'"

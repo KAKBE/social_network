@@ -11,7 +11,7 @@ from app.seed import DEMO_PASSWORD, reset_and_seed
 def test_point_corrected_is_stored_and_defaults_to_false() -> None:
     reset_and_seed()
     client = TestClient(app)
-    token = client.post("/api/auth/login", json={"username": "lesha", "password": DEMO_PASSWORD}).json()["token"]
+    token = client.post("/api/auth/login", json={"login": "lesha", "password": DEMO_PASSWORD}).json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
     body = {"name": "Место", "address": "Москва", "lat": 55.75, "lon": 37.6, "text": "Проверка"}
 

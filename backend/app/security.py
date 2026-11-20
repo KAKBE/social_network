@@ -1,6 +1,14 @@
 import hashlib
 import hmac
+import re
 import secrets
+
+_PASSWORD = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$")
+LOGIN_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,50}$")
+
+
+def password_is_strong(password: str) -> bool:
+    return _PASSWORD.fullmatch(password) is not None
 
 _ITERATIONS = 200_000
 

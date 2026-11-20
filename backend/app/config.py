@@ -11,6 +11,7 @@ class Settings:
     geocoder_user_agent: str
     geocoder_min_interval_s: float
     frontend_dist: str
+    upload_dir: str
 
 
 def load_settings() -> Settings:
@@ -35,6 +36,10 @@ def load_settings() -> Settings:
         frontend_dist=os.getenv(
             "FRONTEND_DIST",
             os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"),
+        ),
+        upload_dir=os.getenv(
+            "UPLOAD_DIR",
+            os.path.join(os.path.dirname(__file__), "..", "..", "uploads"),
         ),
     )
 

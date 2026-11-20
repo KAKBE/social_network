@@ -7,6 +7,7 @@ frontend/dist/
 .env
 checks/geocode_cache.json
 checks/geocode_yandex_raw.json
+uploads/
 backups/
 *.dump
 dump-*.sql

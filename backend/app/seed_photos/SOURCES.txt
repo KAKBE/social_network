@@ -1,0 +1,57 @@
+Photos used for synthetic demo places. The places themselves are not these venues.
+
+coffee.jpg
+  title: Newark-on-Trent, Interior of 'Cherizena Coffee Shop', 23-24 Stodman Street - geograph.org.uk - 7846323.jpg
+  author: Michael Garlick
+  license: CC BY-SA 2.0
+  terms: https://creativecommons.org/licenses/by-sa/2.0
+  page: https://commons.wikimedia.org/wiki/File:Newark-on-Trent,_Interior_of_%27Cherizena_Coffee_Shop%27,_23-24_Stodman_Street_-_geograph.org.uk_-_7846323.jpg
+
+cowork.jpg
+  title: C4DI interior coworking space 2025.jpg
+  author: Influence Media
+  license: CC BY 4.0
+  terms: https://creativecommons.org/licenses/by/4.0
+  page: https://commons.wikimedia.org/wiki/File:C4DI_interior_coworking_space_2025.jpg
+
+park.jpg
+  title: Chihaya Namiki Square Park Chihaya 4-chōme Hiagashi-ku Fukuoka 20230620.jpg
+  author: Hirho
+  license: CC BY-SA 4.0
+  terms: https://creativecommons.org/licenses/by-sa/4.0
+  page: https://commons.wikimedia.org/wiki/File:Chihaya_Namiki_Square_Park_Chihaya_4-ch%C5%8Dme_Hiagashi-ku_Fukuoka_20230620.jpg
+
+cafe.jpg
+  title: Interior of 1UP Cafe 2024-02-18.jpg
+  author: Andy Li
+  license: CC0
+  terms: http://creativecommons.org/publicdomain/zero/1.0/deed.en
+  page: https://commons.wikimedia.org/wiki/File:Interior_of_1UP_Cafe_2024-02-18.jpg
+
+library.jpg
+  title: LOC Main Reading Room Highsmith.jpg
+  author: Carol M. Highsmith
+  license: Public domain
+  terms: 
+  page: https://commons.wikimedia.org/wiki/File:LOC_Main_Reading_Room_Highsmith.jpg
+
+exhibit.jpg
+  title: Melaka Art Gallery - Exhibition Hall.jpg
+  author: Chongkian
+  license: CC BY-SA 4.0
+  terms: https://creativecommons.org/licenses/by-sa/4.0
+  page: https://commons.wikimedia.org/wiki/File:Melaka_Art_Gallery_-_Exhibition_Hall.jpg
+
+bar.jpg
+  title: Bar interior
+  author: Unsplash contributor
+  license: Unsplash License
+  terms: https://unsplash.com/license
+  page: https://unsplash.com/photos/1514933651103-005eec06c04b
+
+anticafe.jpg
+  title: Board game on a table
+  author: Unsplash contributor
+  license: Unsplash License
+  terms: https://unsplash.com/license
+  page: https://unsplash.com/photos/1610890716171-6b1bb98ffd09

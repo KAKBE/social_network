@@ -24,6 +24,26 @@ class GeocodeResult:
     display_name: str
     lat: float
     lon: float
+    city: str = ""
+
+
+def city_from_address(address: object) -> str:
+    if not isinstance(address, dict):
+        return ""
+    for key in ("city", "town", "village", "municipality"):
+        value = address.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())[:120]
+    return ""
+
+
+def cached_result(item: dict) -> GeocodeResult:
+    return GeocodeResult(
+        display_name=item["display_name"],
+        lat=float(item["lat"]),
+        lon=float(item["lon"]),
+        city=str(item.get("city") or ""),
+    )
 
 
 def normalize_query(query: str) -> str:
@@ -63,6 +83,7 @@ class NominatimGeocoder:
                         "accept-language": "ru",
                         "viewbox": MOSCOW_VIEWBOX,
                         "bounded": 1,
+                        "addressdetails": 1,
                     },
                 )
                 response.raise_for_status()
@@ -72,7 +93,12 @@ class NominatimGeocoder:
             finally:
                 self._last_request_at = time.monotonic()
         return [
-            GeocodeResult(display_name=item["display_name"], lat=float(item["lat"]), lon=float(item["lon"]))
+            GeocodeResult(
+                display_name=item["display_name"],
+                lat=float(item["lat"]),
+                lon=float(item["lon"]),
+                city=city_from_address(item.get("address")),
+            )
             for item in response.json()
         ]
 
@@ -81,11 +107,55 @@ class NominatimGeocoder:
         key = normalize_query(query)
         cached = session.get(GeocodeCacheEntry, key)
         if cached is not None:
-            return [GeocodeResult(**item) for item in cached.results], True
+            return [cached_result(item) for item in cached.results], True
         results = self.fetch(query)
         session.merge(GeocodeCacheEntry(query=key, results=[asdict(r) for r in results]))
         session.commit()
         return results, False
+
+    def _reverse_url(self) -> str:
+        if self._url.endswith("/search"):
+            return self._url[: -len("search")] + "reverse"
+        return self._url.rstrip("/") + "/reverse"
+
+    def fetch_reverse(self, lat: float, lon: float) -> GeocodeResult | None:
+        with self._lock:
+            wait = self._min_interval_s - (time.monotonic() - self._last_request_at)
+            if wait > 0:
+                time.sleep(wait)
+            try:
+                response = self._client.get(
+                    self._reverse_url(),
+                    params={"lat": lat, "lon": lon, "format": "jsonv2", "accept-language": "ru", "addressdetails": 1},
+                )
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                logger.warning("Reverse geocoder unavailable: %s: %r", type(exc).__name__, exc)
+                raise GeocoderUnavailable(str(exc)) from exc
+            finally:
+                self._last_request_at = time.monotonic()
+        data = response.json()
+        if not isinstance(data, dict) or "display_name" not in data:
+            return None
+        return GeocodeResult(
+            display_name=data["display_name"],
+            lat=float(data.get("lat", lat)),
+            lon=float(data.get("lon", lon)),
+            city=city_from_address(data.get("address")),
+        )
+
+    def reverse(self, session: Session, lat: float, lon: float) -> tuple[str, str, bool]:
+        key = f"reverse:{lat:.5f},{lon:.5f}"
+        cached = session.get(GeocodeCacheEntry, key)
+        if cached is not None:
+            item = cached.results[0] if cached.results else {}
+            return item.get("display_name", ""), str(item.get("city") or ""), True
+        result = self.fetch_reverse(lat, lon)
+        address = result.display_name if result is not None else ""
+        city = result.city if result is not None else ""
+        session.merge(GeocodeCacheEntry(query=key, results=[asdict(result)] if result is not None else []))
+        session.commit()
+        return address, city, False
 
 
 geocoder = NominatimGeocoder()

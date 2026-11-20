@@ -1,15 +1,20 @@
 """Brings the schema to the latest migration, clears user data and loads synthetic test data.
 
 All places are synthetic points inside central Moscow named "Тестовое место"; they are not real
-recommendations and must not be presented as user data.
+recommendations and must not be presented as user data. Each place gets one real
+photograph of that kind of place. Credits are in app/seed_photos/SOURCES.txt.
 """
 
 import random
+import secrets
+import shutil
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.migrations import upgrade_to_head
 from app.models import (
@@ -19,6 +24,7 @@ from app.models import (
     Place,
     PlaceList,
     Recommendation,
+    RecommendationPhoto,
     User,
 )
 from app.security import hash_password
@@ -30,6 +36,17 @@ STRANGERS = [("stranger1", "Посторонний 1"), ("stranger2", "Пост�
 RECOMMENDATIONS_PER_FRIEND = 10
 RECOMMENDATIONS_PER_STRANGER = 10
 CATEGORIES = ["кофейня", "коворкинг", "парк", "кафе", "библиотека", "выставка", "бар", "антикафе"]
+CATEGORY_PHOTO = {
+    "кофейня": "coffee.jpg",
+    "коворкинг": "cowork.jpg",
+    "парк": "park.jpg",
+    "кафе": "cafe.jpg",
+    "библиотека": "library.jpg",
+    "выставка": "exhibit.jpg",
+    "бар": "bar.jpg",
+    "антикафе": "anticafe.jpg",
+}
+PHOTO_ROOT = Path(__file__).resolve().parent / "seed_photos"
 TEXTS = [
     "Тихо, есть розетки, удобно готовиться к семинарам.",
     "Хорошее место, чтобы встретиться после пар.",
@@ -41,7 +58,7 @@ CENTER_BOX = (55.70, 55.80, 37.50, 37.70)
 
 
 def add_user(session: Session, username: str, display_name: str, password_hash: str) -> User:
-    user = User(username=username, display_name=display_name, password_hash=password_hash)
+    user = User(login=username, username=username, display_name=display_name, password_hash=password_hash)
     session.add(user)
     session.flush()
     return user
@@ -51,31 +68,53 @@ def befriend(session: Session, a: User, b: User) -> None:
     session.add_all([Friendship(user_id=a.id, friend_id=b.id), Friendship(user_id=b.id, friend_id=a.id)])
 
 
+def photo_directory() -> Path:
+    path = Path(settings.upload_dir) / "recommendations"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def clear_seed_photos() -> None:
+    directory = Path(settings.upload_dir) / "recommendations"
+    if directory.exists():
+        shutil.rmtree(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+
 def add_recommendations(session: Session, rng: random.Random, author: User, count: int, counter: list[int]) -> None:
     now = datetime.now(UTC)
+    directory = photo_directory()
     for _ in range(count):
         counter[0] += 1
+        category = rng.choice(CATEGORIES)
         lat_min, lat_max, lon_min, lon_max = CENTER_BOX
         place = Place(
-            name=f"Тестовое место №{counter[0]} ({rng.choice(CATEGORIES)})",
+            name=f"Тестовое место №{counter[0]} ({category})",
             address="синтетические тестовые данные",
             lat=round(rng.uniform(lat_min, lat_max), 6),
             lon=round(rng.uniform(lon_min, lon_max), 6),
             created_by=author.id,
+            city="Москва",
         )
         session.add(place)
         session.flush()
+        recommendation = Recommendation(
+            author_id=author.id,
+            place_id=place.id,
+            text=rng.choice(TEXTS),
+            created_at=now - timedelta(minutes=rng.randint(1, 60 * 24 * 30)),
+        )
+        session.add(recommendation)
+        session.flush()
+        stored_name = f"{secrets.token_hex(16)}.jpg"
+        (directory / stored_name).write_bytes((PHOTO_ROOT / CATEGORY_PHOTO[category]).read_bytes())
         session.add(
-            Recommendation(
-                author_id=author.id,
-                place_id=place.id,
-                text=rng.choice(TEXTS),
-                created_at=now - timedelta(minutes=rng.randint(1, 60 * 24 * 30)),
-            )
+            RecommendationPhoto(recommendation_id=recommendation.id, stored_name=stored_name, position=0)
         )
 
 
 def seed(session: Session) -> None:
+    clear_seed_photos()
     rng = random.Random(42)
     password_hash = hash_password(DEMO_PASSWORD)
     main = add_user(session, *MAIN_USER, password_hash)

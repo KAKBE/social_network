@@ -9,12 +9,26 @@ const props = defineProps({
   active: { type: Boolean, default: true },
   focus: { type: Object, default: null },
 });
-const emit = defineEmits(["select", "rendered"]);
+const emit = defineEmits(["select", "open", "rendered"]);
 
 const MOSCOW_CENTER = [55.751, 37.618];
 const container = ref(null);
 let map = null;
 let markersLayer = null;
+
+function bubble(item) {
+  const root = document.createElement("div");
+  const place = document.createElement("strong");
+  place.textContent = item.place.name;
+  const author = document.createElement("div");
+  author.textContent = item.author.display_name;
+  const open = document.createElement("button");
+  open.type = "button";
+  open.textContent = "Открыть";
+  open.addEventListener("click", () => emit("open", item));
+  root.append(place, author, open);
+  return root;
+}
 
 function drawMarkers(items) {
   markersLayer.clearLayers();
@@ -26,7 +40,7 @@ function drawMarkers(items) {
       fillColor: item.is_own ? "#2f6fed" : "#c6f135",
       fillOpacity: 1,
     })
-      .on("click", () => emit("select", item))
+      .bindPopup(bubble(item))
       .addTo(markersLayer);
   }
 }
