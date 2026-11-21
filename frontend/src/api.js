@@ -97,6 +97,8 @@ export const api = {
   acceptFriendRequest: (id) => request("POST", `/api/friend-requests/${id}/accept`),
   rejectFriendRequest: (id) => request("POST", `/api/friend-requests/${id}/reject`),
   friends: () => request("GET", "/api/friends"),
+  notifications: () => request("GET", "/api/notifications"),
+  readNotification: (id) => request("POST", `/api/notifications/${id}/read`),
   setCloseFriend: (username, close) => request("PUT", `/api/friends/${encodeURIComponent(username)}/close`, { close }),
   feedWithTiming: () => send("GET", "/api/feed?limit=100"),
   unseenFeed: ({ city = "", author = "" } = {}) => {

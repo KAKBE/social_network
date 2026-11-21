@@ -307,3 +307,17 @@ class PerfSampleIn(BaseModel):
 class ClientConfigOut(BaseModel):
     tile_url: str
     tile_attribution: str
+
+
+class NotificationOut(BaseModel):
+    id: int
+    recommendation_id: int
+    author_name: str
+    place_name: str
+    read: bool
+    created_at: datetime
+
+
+class NotificationListOut(BaseModel):
+    unread: int
+    items: list[NotificationOut]

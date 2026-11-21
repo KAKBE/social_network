@@ -15,9 +15,11 @@ from app.config import settings
 from app.db import get_session
 from app.geocoding import GeocoderUnavailable, geocoder
 from app.images import MAX_BYTES, ImageRejected, inspect_image
+from app.notify import enqueue
 from app.models import (
     AuthSession,
     CloseFriend,
+    FriendNotification,
     FriendRequest,
     Friendship,
     PerfSample,
@@ -30,6 +32,7 @@ from app.models import (
     RecommendationPhoto,
     RecommendationView,
     User,
+    utcnow,
 )
 from app.schemas import (
     AddPlaceIn,
@@ -43,6 +46,8 @@ from app.schemas import (
     GeocodeOut,
     LoginIn,
     MeOut,
+    NotificationListOut,
+    NotificationOut,
     PasswordChangeIn,
     PerfSampleIn,
     ProfileOut,
@@ -641,6 +646,7 @@ def publish_recommendation(recommendation_id: int, user: CurrentUser, session: D
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Это не черновик")
     row.status = "published"
     row.publish_at = None
+    enqueue(session, row)
     session.commit()
     return recommendation_outs(session, user.id, [row])[0]
 
@@ -843,9 +849,51 @@ def create_recommendation(body: RecommendationIn, user: CurrentUser, session: Db
         select(PlaceListItem).where(PlaceListItem.list_id == place_list.id, PlaceListItem.place_id == place.id)
     ) is None:
         session.add(saved_place_item(place_list.id, place))
+    enqueue(session, rec)
     session.commit()
     session.refresh(rec, ["author", "place"])
     return recommendation_outs(session, user.id, [rec])[0]
+
+
+def notification_rows(session: Session, user_id: int):
+    return session.execute(
+        select(FriendNotification, User.display_name, Place.name)
+        .join(Recommendation, Recommendation.id == FriendNotification.recommendation_id)
+        .join(User, User.id == Recommendation.author_id)
+        .join(Place, Place.id == Recommendation.place_id)
+        .where(FriendNotification.user_id == user_id)
+        .order_by(FriendNotification.created_at.desc(), FriendNotification.id.desc())
+    ).all()
+
+
+@router.get("/notifications")
+def list_notifications(user: CurrentUser, session: DbSession) -> NotificationListOut:
+    rows = notification_rows(session, user.id)
+    return NotificationListOut(
+        unread=sum(1 for note, _, _ in rows if note.read_at is None),
+        items=[
+            NotificationOut(
+                id=note.id,
+                recommendation_id=note.recommendation_id,
+                author_name=author_name,
+                place_name=place_name,
+                read=note.read_at is not None,
+                created_at=note.created_at,
+            )
+            for note, author_name, place_name in rows
+        ],
+    )
+
+
+@router.post("/notifications/{notification_id}/read")
+def read_notification(notification_id: int, user: CurrentUser, session: DbSession) -> NotificationListOut:
+    note = session.get(FriendNotification, notification_id)
+    if note is None or note.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Уведомление не найдено")
+    if note.read_at is None:
+        note.read_at = utcnow()
+        session.commit()
+    return list_notifications(user, session)
 
 
 @router.post("/geocode")

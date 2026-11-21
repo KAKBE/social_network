@@ -204,3 +204,37 @@ class GeocodeCacheEntry(Base):
     query: Mapped[str] = mapped_column(String(300), primary_key=True)
     results: Mapped[list] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NotificationJob(Base):
+    """One fan-out of a published recommendation. The id stays stable across claim and retry."""
+
+    __tablename__ = "notification_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recommendation_id: Mapped[int] = mapped_column(
+        ForeignKey("recommendations.id", ondelete="CASCADE"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="queued", server_default="queued")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    claimed_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(default=0, server_default="0")
+    process_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class FriendNotification(Base):
+    """A friend can receive the same recommendation only once, even if the job is claimed twice."""
+
+    __tablename__ = "friend_notifications"
+    __table_args__ = (UniqueConstraint("user_id", "recommendation_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id", ondelete="CASCADE"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("notification_jobs.id", ondelete="CASCADE"))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

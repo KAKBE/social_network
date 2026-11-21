@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { api, ApiError, getToken, setToken } from "./api.js";
 import { getSeries, measureFirstRender } from "./perf.js";
 import LoginView from "./components/LoginView.vue";
@@ -40,8 +40,11 @@ const notice = ref("");
 const loadError = ref("");
 const lastPerf = ref(null);
 const perfOpen = ref(false);
+const notes = ref([]);
+const unread = ref(0);
 let feedServerMs = null;
 let measured = false;
+let poll = 0;
 
 function flash(message) {
   notice.value = message;
@@ -63,7 +66,23 @@ function logout() {
   pendingPlace.value = null;
   tab.value = "map";
   lastPerf.value = null;
+  notes.value = [];
+  unread.value = 0;
+  clearInterval(poll);
   document.documentElement.dataset.theme = "dark";
+}
+
+async function refreshNotes() {
+  const data = await api.notifications();
+  notes.value = data.items;
+  unread.value = data.unread;
+}
+
+function startPoll() {
+  clearInterval(poll);
+  poll = setInterval(() => {
+    refreshNotes().catch(() => {});
+  }, 10000);
 }
 
 watch(
@@ -93,6 +112,7 @@ async function load() {
     user.value = me;
     feed.value = feedResponse.data;
     lists.value = myLists;
+    await refreshNotes();
     if (tab.value === "feed") await ensureUnseen();
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) logout();
@@ -114,6 +134,18 @@ async function onMapRendered(markers) {
 async function onLoggedIn(token) {
   setToken(token);
   await load();
+  startPoll();
+}
+
+async function openNote(item) {
+  try {
+    const data = await api.readNotification(item.id);
+    notes.value = data.items;
+    unread.value = data.unread;
+    openRecommendation(await api.recommendation(item.recommendation_id));
+  } catch (e) {
+    flash(e.message);
+  }
 }
 
 function upsertList(updated) {
@@ -229,8 +261,13 @@ function onCreated(rec) {
 }
 
 onMounted(() => {
-  if (getToken()) load();
+  if (getToken()) {
+    load();
+    startPoll();
+  }
 });
+
+onUnmounted(() => clearInterval(poll));
 </script>
 
 <template>
@@ -242,6 +279,15 @@ onMounted(() => {
   <div v-else-if="!user || !config" class="login"><p class="muted">Загрузка…</p></div>
   <div v-else class="app">
     <header class="topbar">
+      <button class="icon bell" :aria-label="unread ? `Уведомления, ${unread}` : 'Уведомления'" @click="tab = 'notifications'">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M12 3a5 5 0 0 0-5 5v2.1c0 .8-.3 1.6-.8 2.2L4.6 14.4A1 1 0 0 0 5.4 16h13.2a1 1 0 0 0 .8-1.6l-1.6-2.1a3.2 3.2 0 0 1-.8-2.2V8a5 5 0 0 0-5-5zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21z"
+          />
+        </svg>
+        <span v-if="unread" class="bell-count">{{ unread }}</span>
+      </button>
       <strong>По Следу</strong>
       <button class="badge" @click="perfOpen = !perfOpen">
         {{ feed.length }} рек.
@@ -275,6 +321,14 @@ onMounted(() => {
             @close="selected = null"
           />
         </div>
+      </section>
+
+      <section v-show="tab === 'notifications'" class="page">
+        <h2>Уведомления</h2>
+        <p v-if="!notes.length" class="muted">Уведомлений нет.</p>
+        <button v-for="item in notes" :key="item.id" class="note" @click="openNote(item)">
+          {{ item.author_name }}: новая рекомендация «{{ item.place_name }}»
+        </button>
       </section>
 
       <section v-show="tab === 'feed'" class="page">
