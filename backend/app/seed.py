@@ -1,8 +1,8 @@
-"""Brings the schema to the latest migration, clears user data and loads synthetic test data.
+"""Brings the schema to the latest migration, clears user data and loads the demo.
 
-All places are synthetic points inside central Moscow named "Тестовое место"; they are not real
-recommendations and must not be presented as user data. Each place gets one real
-photograph of that kind of place. Credits are in app/seed_photos/SOURCES.txt.
+Places are real Moscow venues. Each recommendation stores a photograph of that venue.
+Credits are in app/seed_photos/SOURCES.txt. Logins of the demo accounts stay stable
+because the tests and the trial script sign in with them.
 """
 
 import random
@@ -30,37 +30,152 @@ from app.models import (
 from app.security import hash_password
 
 DEMO_PASSWORD = "demo1234"
-MAIN_USER = ("lesha", "Лёша")
-FRIENDS = [("anya", "Аня"), ("sasha", "Саша"), ("kristina", "Кристина"), ("dima", "Дима"), ("masha", "Маша")]
-STRANGERS = [("stranger1", "Посторонний 1"), ("stranger2", "Посторонний 2"), ("stranger3", "Посторонний 3")]
+# login, display name, surname, bio
+MAIN_USER = ("lesha", "Лёша", "Волков", "Собираю места, куда можно пойти после пар.")
+FRIENDS = [
+    ("anya", "Аня", "Соколова", "Люблю тихие залы и кофе рядом."),
+    ("sasha", "Саша", "Орлов", "Чаще зову гулять, чем сидеть дома."),
+    ("kristina", "Кристина", "Белова", "Ищу места, где можно долго разговаривать."),
+    ("dima", "Дима", "Кузнецов", "Хожу на выставки и в библиотеки."),
+    ("masha", "Маша", "Лебедева", "Собираю дворы и парки в центре."),
+]
+STRANGERS = [
+    ("stranger1", "Никита", "Егоров", "Друг Ани, с Лёшей не знаком."),
+    ("stranger2", "Оля", "Смирнова", "Ходит по тем же местам, но в другой компании."),
+    ("stranger3", "Паша", "Новиков", "Редко бывает в центре, зато советует точно."),
+]
 RECOMMENDATIONS_PER_FRIEND = 10
 RECOMMENDATIONS_PER_STRANGER = 10
-CATEGORIES = ["кофейня", "коворкинг", "парк", "кафе", "библиотека", "выставка", "бар", "антикафе"]
-CATEGORY_PHOTO = {
-    "кофейня": "coffee.jpg",
-    "коворкинг": "cowork.jpg",
-    "парк": "park.jpg",
-    "кафе": "cafe.jpg",
-    "библиотека": "library.jpg",
-    "выставка": "exhibit.jpg",
-    "бар": "bar.jpg",
-    "антикафе": "anticafe.jpg",
-}
 PHOTO_ROOT = Path(__file__).resolve().parent / "seed_photos"
-TEXTS = [
-    "Тихо, есть розетки, удобно готовиться к семинарам.",
-    "Хорошее место, чтобы встретиться после пар.",
-    "Были с друзьями в выходные, советую.",
-    "Уютно, недорого, можно сидеть долго.",
-    "Отличное место для свидания вечером.",
+AVATAR_ROOT = PHOTO_ROOT / "avatars"
+VENUES = [
+    {
+        "name": "Парк Горького",
+        "address": "Москва, ул. Крымский Вал, 9",
+        "lat": 55.7308,
+        "lon": 37.6027,
+        "category": "walk",
+        "photo": "gorky.jpg",
+        "text": "Вечером хорошо идти вдоль набережной и сесть у фонтана.",
+    },
+    {
+        "name": "Нескучный сад",
+        "address": "Москва, Ленинский проспект, 30",
+        "lat": 55.7183,
+        "lon": 37.5890,
+        "category": "walk",
+        "photo": "neskuchny.jpg",
+        "text": "Тихие аллеи, удобно гулять, когда в Парке Горького уже шумно.",
+    },
+    {
+        "name": "Патриаршие пруды",
+        "address": "Москва, Малая Бронная улица",
+        "lat": 55.7639,
+        "lon": 37.5923,
+        "category": "walk",
+        "photo": "patriarch.jpg",
+        "text": "Короткий круг вокруг пруда, потом можно зайти в кофейню рядом.",
+    },
+    {
+        "name": "Парк «Зарядье»",
+        "address": "Москва, ул. Варварка, 6",
+        "lat": 55.7510,
+        "lon": 37.6289,
+        "category": "walk",
+        "photo": "zaryadye.jpg",
+        "text": "Парящий мост и вид на реку. Лучше приходить до заката.",
+    },
+    {
+        "name": "Третьяковская галерея",
+        "address": "Москва, Лаврушинский переулок, 10",
+        "lat": 55.7414,
+        "lon": 37.6208,
+        "category": "meet",
+        "photo": "tretyakov.jpg",
+        "text": "Можно выбрать один-два зала и не пытаться обойти всё сразу.",
+    },
+    {
+        "name": "ГМИИ им. А. С. Пушкина",
+        "address": "Москва, ул. Волхонка, 12",
+        "lat": 55.7473,
+        "lon": 37.6052,
+        "category": "meet",
+        "photo": "pushkin.jpg",
+        "text": "Удобно встретиться у входа и пойти в залы, которые открыты в этот день.",
+    },
+    {
+        "name": "Музей «Гараж»",
+        "address": "Москва, ул. Крымский Вал, 9, стр. 32",
+        "lat": 55.7274,
+        "lon": 37.6016,
+        "category": "meet",
+        "photo": "garage.jpg",
+        "text": "Выставка смотрится за час, потом можно остаться в парке.",
+    },
+    {
+        "name": "Дом Пашкова",
+        "address": "Москва, ул. Воздвиженка, 3/5, стр. 1",
+        "lat": 55.7496,
+        "lon": 37.6086,
+        "category": "study",
+        "photo": "pashkov.jpg",
+        "text": "Красиво даже с улицы. Рядом тихо посидеть с конспектом.",
+    },
+    {
+        "name": "Российская государственная библиотека",
+        "address": "Москва, ул. Воздвиженка, 3/5",
+        "lat": 55.7517,
+        "lon": 37.6094,
+        "category": "study",
+        "photo": "rsl.jpg",
+        "text": "Если нужна тишина и розетка, лучше читать здесь, чем в кафе.",
+    },
+    {
+        "name": "Дизайн-завод «Флакон»",
+        "address": "Москва, ул. Большая Новодмитровская, 36",
+        "lat": 55.8046,
+        "lon": 37.5854,
+        "category": "study",
+        "photo": "flacon.jpg",
+        "text": "Можно работать во дворе и никуда не спешить.",
+    },
+    {
+        "name": "ВДНХ",
+        "address": "Москва, проспект Мира, 119",
+        "lat": 55.8263,
+        "lon": 37.6379,
+        "category": "walk",
+        "photo": "vdnh.jpg",
+        "text": "Встречаемся у главной арки и идём в ту сторону, где меньше людей.",
+    },
+    {
+        "name": "Кулинарная лавка братьев Караваевых",
+        "address": "Москва, ул. Большая Ордынка, 7",
+        "lat": 55.744733,
+        "lon": 37.624948,
+        "category": "food",
+        "photo": "karavaevy.jpg",
+        "text": "Берут пироги с собой и идут гулять к Третьяковке.",
+    },
 ]
-CENTER_BOX = (55.70, 55.80, 37.50, 37.70)
 
 
-def add_user(session: Session, username: str, display_name: str, password_hash: str) -> User:
-    user = User(login=username, username=username, display_name=display_name, password_hash=password_hash)
+def add_user(session: Session, username: str, display_name: str, surname: str, bio: str, password_hash: str) -> User:
+    user = User(
+        login=username,
+        username=username,
+        display_name=display_name,
+        surname=surname,
+        bio=bio,
+        password_hash=password_hash,
+    )
     session.add(user)
     session.flush()
+    avatar = AVATAR_ROOT / f"{username}.jpg"
+    if avatar.is_file():
+        stored_name = f"{secrets.token_hex(16)}.jpg"
+        (avatar_directory() / stored_name).write_bytes(avatar.read_bytes())
+        user.avatar_path = stored_name
     return user
 
 
@@ -68,31 +183,38 @@ def befriend(session: Session, a: User, b: User) -> None:
     session.add_all([Friendship(user_id=a.id, friend_id=b.id), Friendship(user_id=b.id, friend_id=a.id)])
 
 
-def photo_directory() -> Path:
-    path = Path(settings.upload_dir) / "recommendations"
+def upload_directory(kind: str) -> Path:
+    path = Path(settings.upload_dir) / kind
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
+def avatar_directory() -> Path:
+    return upload_directory("avatars")
+
+
+def photo_directory() -> Path:
+    return upload_directory("recommendations")
+
+
 def clear_seed_photos() -> None:
-    directory = Path(settings.upload_dir) / "recommendations"
-    if directory.exists():
-        shutil.rmtree(directory)
-    directory.mkdir(parents=True, exist_ok=True)
+    for kind in ("recommendations", "avatars"):
+        directory = Path(settings.upload_dir) / kind
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True, exist_ok=True)
 
 
-def add_recommendations(session: Session, rng: random.Random, author: User, count: int, counter: list[int]) -> None:
+def add_recommendations(session: Session, rng: random.Random, author: User, start: int, count: int) -> None:
     now = datetime.now(UTC)
     directory = photo_directory()
-    for _ in range(count):
-        counter[0] += 1
-        category = rng.choice(CATEGORIES)
-        lat_min, lat_max, lon_min, lon_max = CENTER_BOX
+    for offset in range(count):
+        venue = VENUES[(start + offset) % len(VENUES)]
         place = Place(
-            name=f"Тестовое место №{counter[0]} ({category})",
-            address="синтетические тестовые данные",
-            lat=round(rng.uniform(lat_min, lat_max), 6),
-            lon=round(rng.uniform(lon_min, lon_max), 6),
+            name=venue["name"],
+            address=venue["address"],
+            lat=venue["lat"],
+            lon=venue["lon"],
             created_by=author.id,
             city="Москва",
         )
@@ -101,16 +223,15 @@ def add_recommendations(session: Session, rng: random.Random, author: User, coun
         recommendation = Recommendation(
             author_id=author.id,
             place_id=place.id,
-            text=rng.choice(TEXTS),
+            text=venue["text"],
+            category=venue["category"],
             created_at=now - timedelta(minutes=rng.randint(1, 60 * 24 * 30)),
         )
         session.add(recommendation)
         session.flush()
         stored_name = f"{secrets.token_hex(16)}.jpg"
-        (directory / stored_name).write_bytes((PHOTO_ROOT / CATEGORY_PHOTO[category]).read_bytes())
-        session.add(
-            RecommendationPhoto(recommendation_id=recommendation.id, stored_name=stored_name, position=0)
-        )
+        (directory / stored_name).write_bytes((PHOTO_ROOT / venue["photo"]).read_bytes())
+        session.add(RecommendationPhoto(recommendation_id=recommendation.id, stored_name=stored_name, position=0))
 
 
 def seed(session: Session) -> None:
@@ -118,8 +239,8 @@ def seed(session: Session) -> None:
     rng = random.Random(42)
     password_hash = hash_password(DEMO_PASSWORD)
     main = add_user(session, *MAIN_USER, password_hash)
-    friends = [add_user(session, u, n, password_hash) for u, n in FRIENDS]
-    strangers = [add_user(session, u, n, password_hash) for u, n in STRANGERS]
+    friends = [add_user(session, *row, password_hash) for row in FRIENDS]
+    strangers = [add_user(session, *row, password_hash) for row in STRANGERS]
 
     for friend in friends:
         befriend(session, main, friend)
@@ -130,11 +251,10 @@ def seed(session: Session) -> None:
         for other in strangers[i + 1 :]:
             befriend(session, stranger, other)
 
-    counter = [0]
-    for friend in friends:
-        add_recommendations(session, rng, friend, RECOMMENDATIONS_PER_FRIEND, counter)
-    for stranger in strangers:
-        add_recommendations(session, rng, stranger, RECOMMENDATIONS_PER_STRANGER, counter)
+    for index, author in enumerate(friends):
+        add_recommendations(session, rng, author, index * 2, RECOMMENDATIONS_PER_FRIEND)
+    for index, author in enumerate(strangers):
+        add_recommendations(session, rng, author, index * 3 + 1, RECOMMENDATIONS_PER_STRANGER)
 
     session.add(PlaceList(owner_id=main.id, title="Учёба"))
     session.commit()
@@ -155,5 +275,5 @@ if __name__ == "__main__":
     reset_and_seed()
     print(
         f"Готово: пользователь {MAIN_USER[0]}, {len(FRIENDS)} друзей по "
-        f"{RECOMMENDATIONS_PER_FRIEND} рекомендаций, {len(STRANGERS)} посторонних. Пароль: {DEMO_PASSWORD}"
+        f"{RECOMMENDATIONS_PER_FRIEND} рекомендаций, {len(STRANGERS)} знакомых друзей. Пароль: {DEMO_PASSWORD}"
     )

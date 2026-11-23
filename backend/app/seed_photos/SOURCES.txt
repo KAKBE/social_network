@@ -1,4 +1,99 @@
-Photos used for synthetic demo places. The places themselves are not these venues.
+Photographs attached to the demo venues. Each file is a picture of that place.
+Yandex Maps was used to choose real addresses. Photographs from Yandex are not copied:
+they belong to their authors. These files are reused under the licenses below.
+
+gorky.jpg — Парк Горького
+  title: Gorky Park, Moscow (31674966590).jpg
+  author: SteveInLeighton's Photos
+  license: CC BY-SA 2.0
+  terms: https://creativecommons.org/licenses/by-sa/2.0
+  page: https://commons.wikimedia.org/wiki/File:Gorky_Park,_Moscow_(31674966590).jpg
+
+neskuchny.jpg — Нескучный сад
+  title: Moscow - Neskuchny Garden on a hot summer day.jpg
+  author: Юрий Д.К.
+  license: CC BY 4.0
+  terms: https://creativecommons.org/licenses/by/4.0
+  page: https://commons.wikimedia.org/wiki/File:Moscow_-_Neskuchny_Garden_on_a_hot_summer_day.jpg
+
+patriarch.jpg — Патриаршие пруды
+  title: Patriarch Ponds.jpg
+  author: Dimа
+  license: CC BY-SA 3.0
+  terms: https://creativecommons.org/licenses/by-sa/3.0
+  page: https://commons.wikimedia.org/wiki/File:Patriarch_Ponds.jpg
+
+zaryadye.jpg — Парк «Зарядье»
+  title: Glass Crust in Zaryadye park, Moscow, Russia.jpg
+  author: DmitriyGuryanov
+  license: CC BY-SA 4.0
+  terms: https://creativecommons.org/licenses/by-sa/4.0
+  page: https://commons.wikimedia.org/wiki/File:Glass_Crust_in_Zaryadye_park,_Moscow,_Russia.jpg
+
+tretyakov.jpg — Третьяковская галерея
+  title: State Tretyakov Gallery Moscow.jpg
+  author: Bernt Rostad
+  license: CC BY 2.0
+  terms: https://creativecommons.org/licenses/by/2.0
+  page: https://commons.wikimedia.org/wiki/File:State_Tretyakov_Gallery_Moscow.jpg
+
+pushkin.jpg — ГМИИ им. А. С. Пушкина
+  title: МузейАСПушкина фасад1 IMG 1792.3 e1.jpg
+  author: T3ru
+  license: CC BY-SA 4.0
+  terms: https://creativecommons.org/licenses/by-sa/4.0
+  page: https://commons.wikimedia.org/wiki/File:МузейАСПушкина_фасад1_IMG_1792.3_e1.jpg
+
+garage.jpg — Музей «Гараж»
+  title: Moscow, Garage Museum building in Gorky Park (18910681363).jpg
+  author: Sergey Norin
+  license: CC BY 2.0
+  terms: https://creativecommons.org/licenses/by/2.0
+  page: https://commons.wikimedia.org/wiki/File:Moscow,_Garage_Museum_building_in_Gorky_Park_(18910681363).jpg
+
+pashkov.jpg — Дом Пашкова
+  title: Moscow - 2025 - Pashkov House - Facade.jpg
+  author: Юрий Д.К.
+  license: CC BY 4.0
+  terms: https://creativecommons.org/licenses/by/4.0
+  page: https://commons.wikimedia.org/wiki/File:Moscow_-_2025_-_Pashkov_House_-_Facade.jpg
+
+rsl.jpg — Российская государственная библиотека
+  title: Moscow RSL main building asv2019-06 img1.jpg
+  author: A.Savin
+  license: Free Art License
+  terms: https://artlibre.org/licence/lal/en/
+  page: https://commons.wikimedia.org/wiki/File:Moscow_RSL_main_building_asv2019-06_img1.jpg
+
+flacon.jpg — Дизайн-завод «Флакон»
+  title: Old Flacon 5.jpg
+  author: Flacon PR department
+  license: CC BY-SA 4.0
+  terms: https://creativecommons.org/licenses/by-sa/4.0
+  page: https://commons.wikimedia.org/wiki/File:Old_Flacon_5.jpg
+
+vdnh.jpg — ВДНХ
+  title: VDNKh Main Entrance Arch 3.jpg
+  author: MBH
+  license: CC BY 4.0
+  terms: https://creativecommons.org/licenses/by/4.0
+  page: https://commons.wikimedia.org/wiki/File:VDNKh_Main_Entrance_Arch_3.jpg
+
+karavaevy.jpg — Кулинарная лавка братьев Караваевых, Большая Ордынка, 7
+  title: Moscow, Bolshaya Ordynka 7, Bratya Karavayevy, July 2025 03.jpg
+  author: Retired electrician
+  license: CC0
+  terms: https://creativecommons.org/publicdomain/zero/1.0/
+  page: https://commons.wikimedia.org/wiki/File:Moscow,_Bolshaya_Ordynka_7,_Bratya_Karavayevy,_July_2025_03.jpg
+
+avatars/lesha.jpg, anya.jpg, sasha.jpg
+  original portraits made for this demo, not photographs of real people
+
+avatars/kristina.jpg, dima.jpg, masha.jpg, stranger1.jpg, stranger2.jpg, stranger3.jpg
+  original drawn portraits made for this demo
+
+Older category photos, no longer attached to a venue:
+
 
 coffee.jpg
   title: Newark-on-Trent, Interior of 'Cherizena Coffee Shop', 23-24 Stodman Street - geograph.org.uk - 7846323.jpg
