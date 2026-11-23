@@ -1,3 +1,5 @@
+Avatars in avatars/ are generated fictional portraits for the demo. They are not photographs of real people.
+
 Photographs attached to the demo venues. Each file is a picture of that place.
 Yandex Maps was used to choose real addresses. Photographs from Yandex are not copied:
 they belong to their authors. These files are reused under the licenses below.

@@ -7,6 +7,7 @@ const props = defineProps({
   item: { type: Object, required: true },
   lists: { type: Array, required: true },
   showMapButton: { type: Boolean, default: false },
+  showListButton: { type: Boolean, default: true },
   closable: { type: Boolean, default: false },
 });
 const emit = defineEmits(["show-on-map", "close", "open", "to-list", "open-author"]);
@@ -68,7 +69,7 @@ onBeforeUnmount(releasePhoto);
     <div class="card-actions">
       <button class="secondary" @click="emit('open')">Открыть</button>
       <button v-if="showMapButton" class="secondary" @click="emit('show-on-map', item)">На карте</button>
-      <button @click="emit('to-list', item.place)">В список</button>
+      <button v-if="showListButton" @click="emit('to-list', item.place)">В список</button>
     </div>
   </article>
 </template>

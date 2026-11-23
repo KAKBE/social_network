@@ -2,11 +2,14 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api.js";
 import { PLACE_CATEGORIES } from "../categories.js";
+import { canOpenProfileMap, postsForChip } from "../profileMap.js";
+import MapView from "./MapView.vue";
 import RecommendationCard from "./RecommendationCard.vue";
 
 const props = defineProps({
   publicId: { type: String, required: true },
   lists: { type: Array, required: true },
+  config: { type: Object, required: true },
   active: { type: Boolean, default: true },
 });
 const emit = defineEmits(["back", "open", "open-profile", "to-list", "settings", "saved", "add", "show-on-map"]);
@@ -15,6 +18,7 @@ const page = ref(null);
 const posts = ref([]);
 const error = ref("");
 const chip = ref("all");
+const showMap = ref(false);
 const editing = ref(false);
 const showAllFriends = ref(false);
 const busy = ref(false);
@@ -40,11 +44,8 @@ const usedCategories = computed(() =>
 );
 const hasDrafts = computed(() => posts.value.some((post) => post.status === "draft"));
 const publishedCount = computed(() => posts.value.filter((post) => post.status !== "draft").length);
-const visiblePosts = computed(() => {
-  if (chip.value === "drafts") return posts.value.filter((post) => post.status === "draft");
-  if (chip.value === "all") return posts.value.filter((post) => post.status !== "draft");
-  return posts.value.filter((post) => post.category === chip.value && post.status !== "draft");
-});
+const visiblePosts = computed(() => postsForChip(posts.value, chip.value));
+const canMap = computed(() => canOpenProfileMap(posts.value, chip.value));
 
 function releaseFaces() {
   if (ownUrl) URL.revokeObjectURL(ownUrl);
@@ -111,12 +112,17 @@ async function load() {
   await Promise.all(people.map((person) => loadFace(person, seq).catch(() => {})));
 }
 
+watch(canMap, (allowed) => {
+  if (!allowed) showMap.value = false;
+});
+
 watch(
   () => [props.publicId, props.active],
   ([id, active], previous) => {
     if (!active) return;
     if (!previous || previous[0] !== id) {
       chip.value = "all";
+      showMap.value = false;
       editing.value = false;
       showAllFriends.value = false;
     }
@@ -268,7 +274,13 @@ async function toggleClose() {
         </div>
       </div>
 
-      <h2>Рекомендации</h2>
+      <div class="section-head">
+        <h2>Рекомендации</h2>
+        <div v-if="canMap" class="chips view-switch">
+          <button type="button" class="chip" :class="{ active: !showMap }" @click="showMap = false">Список</button>
+          <button type="button" class="chip" :class="{ active: showMap }" @click="showMap = true">Карта</button>
+        </div>
+      </div>
       <div class="chips">
         <button type="button" class="chip" :class="{ active: chip === 'all' }" @click="chip = 'all'">Все</button>
         <button
@@ -288,7 +300,7 @@ async function toggleClose() {
       <button v-if="page.is_self && chip === 'all' && !posts.length" class="empty-feed" @click="emit('add')">
         Рекомендаций нет, но вы можете добавить свою
       </button>
-      <p v-else-if="chip === 'all' && !page.is_self && page.relation !== 'friend'" class="muted">
+      <p v-else-if="chip === 'all' && !page.is_self && page.relation !== 'friend' && !posts.length" class="muted">
         Рекомендации видны друзьям.
       </p>
       <p v-else-if="chip === 'all' && !page.is_self && page.relation === 'friend' && !visiblePosts.length" class="muted">
@@ -297,17 +309,28 @@ async function toggleClose() {
       <p v-else-if="chip !== 'all' && chip !== 'drafts' && !visiblePosts.length" class="muted">
         В этой категории пока нет рекомендаций.
       </p>
+      <MapView
+        v-if="showMap"
+        :items="visiblePosts"
+        :config="config"
+        embedded
+        fit
+        @open="emit('open', $event)"
+      />
+      <template v-if="!showMap">
       <RecommendationCard
         v-for="item in visiblePosts"
         :key="item.id"
         :item="item"
         :lists="lists"
-        show-map-button
+        :show-map-button="item.on_map"
+        :show-list-button="item.on_map"
         @open="emit('open', item)"
         @open-author="emit('open-profile', $event)"
         @to-list="emit('to-list', $event)"
         @show-on-map="emit('show-on-map', $event)"
       />
+      </template>
     </template>
   </section>
 </template>

@@ -170,6 +170,7 @@ async function remove() {
           <option value="close">Близкие друзья</option>
           <option value="allow">Только выбранные друзья</option>
           <option value="deny">Все друзья, кроме выбранных</option>
+          <option value="everyone">Все</option>
         </select>
       </label>
       <fieldset v-if="visibility === 'allow' || visibility === 'deny'">
@@ -202,8 +203,8 @@ async function remove() {
       <button v-if="current.is_own && !editing" @click="startEdit">Изменить</button>
       <button v-if="current.is_own && !editing" class="danger" :disabled="busy" @click="remove">Удалить</button>
       <button v-if="current.is_own && !editing && current.status === 'draft'" class="primary" @click="publish">Опубликовать</button>
-      <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
-      <button @click="emit('to-list', current.place)">В список</button>
+      <button v-if="current.on_map" @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
+      <button v-if="current.on_map" @click="emit('to-list', current.place)">В список</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
   </section>

@@ -272,6 +272,32 @@ button.note {
   inset: 0;
 }
 
+.map.embedded {
+  position: relative;
+  inset: auto;
+  height: min(62vh, 520px);
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.chips.view-switch {
+  margin: 0;
+  overflow: visible;
+}
+
 .map-card {
   position: absolute;
   left: 8px;

@@ -8,6 +8,8 @@ const props = defineProps({
   config: { type: Object, required: true },
   active: { type: Boolean, default: true },
   focus: { type: Object, default: null },
+  embedded: { type: Boolean, default: false },
+  fit: { type: Boolean, default: false },
 });
 const emit = defineEmits(["select", "open", "rendered"]);
 
@@ -43,6 +45,10 @@ function drawMarkers(items) {
       .bindPopup(bubble(item))
       .addTo(markersLayer);
   }
+  if (props.fit && items.length) {
+    const bounds = L.latLngBounds(items.map((item) => [item.place.lat, item.place.lon]));
+    map.fitBounds(bounds.pad(0.25), { maxZoom: 15, animate: false });
+  }
 }
 
 onMounted(async () => {
@@ -76,5 +82,5 @@ watch(
 </script>
 
 <template>
-  <div ref="container" class="map"></div>
+  <div ref="container" class="map" :class="{ embedded }"></div>
 </template>

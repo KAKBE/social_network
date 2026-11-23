@@ -38,14 +38,26 @@ FRIENDS = [
     ("kristina", "Кристина", "Белова", "Ищу места, где можно долго разговаривать."),
     ("dima", "Дима", "Кузнецов", "Хожу на выставки и в библиотеки."),
     ("masha", "Маша", "Лебедева", "Собираю дворы и парки в центре."),
+    ("ira", "Ира", "Морозова", "Люблю короткие прогулки после пар."),
+    ("kostya", "Костя", "Фролов", "Ищу места, где можно поесть и не спешить."),
+    ("lena", "Лена", "Крылова", "Хожу в музеи по одному залу за раз."),
+    ("timur", "Тимур", "Сафин", "Зову друзей туда, где можно посидеть на улице."),
 ]
 STRANGERS = [
     ("stranger1", "Никита", "Егоров", "Друг Ани, с Лёшей не знаком."),
     ("stranger2", "Оля", "Смирнова", "Ходит по тем же местам, но в другой компании."),
     ("stranger3", "Паша", "Новиков", "Редко бывает в центре, зато советует точно."),
 ]
+# Friends of Lesha's friends. They are not friends with Lesha, so their posts stay off his map.
+CIRCLE = [
+    ("vika", "Вика", "Павлова", "Чаще гуляю с Аней, чем сижу дома."),
+    ("polina", "Полина", "Чернова", "Собираю тихие дворы и кофейни."),
+    ("egor", "Егор", "Мишин", "Хожу на выставки после работы."),
+    ("sofia", "Софья", "Громова", "Люблю парки, где можно долго разговаривать."),
+]
 RECOMMENDATIONS_PER_FRIEND = 10
 RECOMMENDATIONS_PER_STRANGER = 10
+PUBLIC_PER_USER = 4
 PHOTO_ROOT = Path(__file__).resolve().parent / "seed_photos"
 AVATAR_ROOT = PHOTO_ROOT / "avatars"
 VENUES = [
@@ -220,12 +232,21 @@ def add_recommendations(session: Session, rng: random.Random, author: User, star
         )
         session.add(place)
         session.flush()
+        # The newest posts are visible to anyone who opens the profile.
+        # Older ones stay with friends, so the map of a stranger stays empty.
+        if offset < PUBLIC_PER_USER:
+            created_at = now - timedelta(days=offset, hours=rng.randint(1, 12))
+            visibility = "everyone"
+        else:
+            created_at = now - timedelta(days=7 + offset, hours=rng.randint(1, 12))
+            visibility = "friends"
         recommendation = Recommendation(
             author_id=author.id,
             place_id=place.id,
             text=venue["text"],
             category=venue["category"],
-            created_at=now - timedelta(minutes=rng.randint(1, 60 * 24 * 30)),
+            visibility=visibility,
+            created_at=created_at,
         )
         session.add(recommendation)
         session.flush()
@@ -241,20 +262,38 @@ def seed(session: Session) -> None:
     main = add_user(session, *MAIN_USER, password_hash)
     friends = [add_user(session, *row, password_hash) for row in FRIENDS]
     strangers = [add_user(session, *row, password_hash) for row in STRANGERS]
+    circle = [add_user(session, *row, password_hash) for row in CIRCLE]
 
     for friend in friends:
         befriend(session, main, friend)
+    # Anya and Sasha stay unconnected: a test signs in as Sasha and expects Anya's post to be hidden.
+    for left, right in ((5, 7), (6, 8), (5, 6), (7, 8)):
+        befriend(session, friends[left], friends[right])
     for i, stranger in enumerate(strangers):
         # Strangers are friends of each other and of one of Lesha's friends, but not of Lesha:
-        # friends-of-friends must stay invisible.
+        # friends-of-friends must stay invisible. stranger1 stays a friend of Anya.
         befriend(session, stranger, friends[i % len(friends)])
         for other in strangers[i + 1 :]:
             befriend(session, stranger, other)
+    vika, polina, egor, sofia = circle
+    befriend(session, vika, friends[0])
+    befriend(session, vika, strangers[0])
+    befriend(session, vika, friends[5])
+    befriend(session, polina, friends[1])
+    befriend(session, polina, friends[2])
+    befriend(session, polina, friends[6])
+    befriend(session, egor, friends[3])
+    befriend(session, egor, strangers[2])
+    befriend(session, egor, friends[8])
+    befriend(session, sofia, friends[4])
+    befriend(session, sofia, strangers[1])
+    befriend(session, sofia, friends[7])
+    befriend(session, vika, polina)
+    befriend(session, egor, sofia)
+    befriend(session, polina, egor)
 
-    for index, author in enumerate(friends):
-        add_recommendations(session, rng, author, index * 2, RECOMMENDATIONS_PER_FRIEND)
-    for index, author in enumerate(strangers):
-        add_recommendations(session, rng, author, index * 3 + 1, RECOMMENDATIONS_PER_STRANGER)
+    for index, author in enumerate([main, *friends, *strangers, *circle]):
+        add_recommendations(session, rng, author, index * 3, RECOMMENDATIONS_PER_FRIEND)
 
     session.add(PlaceList(owner_id=main.id, title="Учёба"))
     session.commit()
@@ -274,6 +313,7 @@ def reset_and_seed() -> None:
 if __name__ == "__main__":
     reset_and_seed()
     print(
-        f"Готово: пользователь {MAIN_USER[0]}, {len(FRIENDS)} друзей по "
-        f"{RECOMMENDATIONS_PER_FRIEND} рекомендаций, {len(STRANGERS)} знакомых друзей. Пароль: {DEMO_PASSWORD}"
+        f"Готово: {MAIN_USER[0]}, друзей {len(FRIENDS)}, знакомых {len(STRANGERS) + len(CIRCLE)}. "
+        f"У каждого {PUBLIC_PER_USER} поста для всех и {RECOMMENDATIONS_PER_FRIEND - PUBLIC_PER_USER} для друзей. "
+        f"Пароль: {DEMO_PASSWORD}"
     )

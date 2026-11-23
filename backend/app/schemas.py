@@ -215,6 +215,7 @@ class RecommendationOut(BaseModel):
     category: str = ""
     photos: list[PhotoOut] = Field(default_factory=list)
     audience: list[str] = Field(default_factory=list)
+    on_map: bool = False
 
 
 class RecommendationIn(BaseModel):
@@ -224,7 +225,7 @@ class RecommendationIn(BaseModel):
     lon: float = Field(ge=-180, le=180)
     text: str = Field(min_length=1, max_length=2000)
     point_corrected: bool = False
-    visibility: Literal["friends", "close", "allow", "deny"] = "friends"
+    visibility: Literal["friends", "close", "allow", "deny", "everyone"] = "friends"
     category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
     draft: bool = False
@@ -259,7 +260,7 @@ class RecommendationIn(BaseModel):
 class RecommendationUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2000)
-    visibility: Literal["friends", "close", "allow", "deny"] = "friends"
+    visibility: Literal["friends", "close", "allow", "deny", "everyone"] = "friends"
     category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
 

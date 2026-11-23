@@ -410,6 +410,7 @@ onUnmounted(() => clearInterval(poll));
         :public-id="profileId"
         :active="tab === 'profile'"
         :lists="lists"
+        :config="config"
         @back="closeProfile"
         @open="openRecommendation"
         @open-profile="openProfile"

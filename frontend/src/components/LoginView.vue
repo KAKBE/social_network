@@ -67,7 +67,7 @@ async function submit() {
     <button v-if="mode === 'login'" class="link" type="button" @click="switchMode('register')">Зарегистрироваться</button>
     <button v-else class="link" type="button" @click="switchMode('login')">Уже есть аккаунт — войти</button>
     <p v-if="mode === 'login'" class="muted small">
-      Рабочий образец. Тестовые пользователи: lesha, anya, sasha, kristina, dima, masha, stranger1–3.
+      Рабочий образец. Пароль demo1234. lesha, anya, sasha, kristina, dima, masha, ira, kostya, lena, timur, vika, polina, egor, sofia, stranger1–3.
     </p>
   </main>
 </template>

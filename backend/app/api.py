@@ -95,8 +95,20 @@ def friend_ids_subquery(user_id: int):
     return select(Friendship.friend_id).where(Friendship.user_id == user_id)
 
 
+def released_recommendation():
+    """A draft or a post with a future publication time is not out yet."""
+    return and_(
+        Recommendation.status == "published",
+        or_(Recommendation.publish_at.is_(None), Recommendation.publish_at <= func.now()),
+    )
+
+
 def recommendation_visible_to(viewer_id: int):
-    """Author always sees the recommendation. Everyone else must be a friend inside the rule."""
+    """Author always sees the recommendation. Everyone else must be a friend inside the rule.
+
+    «Все» is inside the friend rule, so a friend sees it on the map and in the feed.
+    A stranger is not in friend_ids, so the same post stays off their map.
+    """
     in_audience = exists(
         select(RecommendationAudience.user_id).where(
             RecommendationAudience.recommendation_id == Recommendation.id,
@@ -111,17 +123,22 @@ def recommendation_visible_to(viewer_id: int):
     )
     friend_rule = or_(
         Recommendation.visibility == "friends",
+        Recommendation.visibility == "everyone",
         and_(Recommendation.visibility == "close", is_close),
         and_(Recommendation.visibility == "allow", in_audience),
         and_(Recommendation.visibility == "deny", ~in_audience),
     )
-    released = and_(
-        Recommendation.status == "published",
-        or_(Recommendation.publish_at.is_(None), Recommendation.publish_at <= func.now()),
-    )
     return or_(
         Recommendation.author_id == viewer_id,
-        and_(Recommendation.author_id.in_(friend_ids_subquery(viewer_id)), friend_rule, released),
+        and_(Recommendation.author_id.in_(friend_ids_subquery(viewer_id)), friend_rule, released_recommendation()),
+    )
+
+
+def recommendation_readable(viewer_id: int):
+    """Profile and the open page. A published «Все» post is readable by any signed-in user."""
+    return or_(
+        recommendation_visible_to(viewer_id),
+        and_(Recommendation.visibility == "everyone", released_recommendation()),
     )
 
 
@@ -290,6 +307,7 @@ def to_recommendation_out(
     like_count: int,
     photos: list[PhotoOut],
     audience: list[str],
+    on_map: bool,
 ) -> RecommendationOut:
     return RecommendationOut(
         id=rec.id,
@@ -305,6 +323,7 @@ def to_recommendation_out(
         category=rec.category or "",
         photos=photos,
         audience=audience,
+        on_map=on_map,
     )
 
 
@@ -313,9 +332,22 @@ def recommendation_outs(session: Session, viewer_id: int, rows: list[Recommendat
     liked, counts = like_state(session, viewer_id, ids)
     photos = photos_by_recommendation(session, ids)
     audience = audience_names(session, viewer_id, rows)
+    on_map = set()
+    if ids:
+        on_map = set(
+            session.scalars(
+                select(Recommendation.id).where(Recommendation.id.in_(ids), recommendation_visible_to(viewer_id))
+            ).all()
+        )
     return [
         to_recommendation_out(
-            row, viewer_id, row.id in liked, counts.get(row.id, 0), photos.get(row.id, []), audience.get(row.id, [])
+            row,
+            viewer_id,
+            row.id in liked,
+            counts.get(row.id, 0),
+            photos.get(row.id, []),
+            audience.get(row.id, []),
+            row.id in on_map,
         )
         for row in rows
     ]
@@ -592,7 +624,7 @@ def user_recommendations(
         .options(joinedload(Recommendation.author), joinedload(Recommendation.place))
         .where(
             Recommendation.author_id == owner.id,
-            recommendation_visible_to(viewer.id),
+            recommendation_readable(viewer.id),
             *([Recommendation.category == category] if category is not None else []),
         )
         .order_by(Recommendation.created_at.desc(), Recommendation.id.desc())
@@ -692,7 +724,7 @@ def recommendation_page(recommendation_id: int, user: CurrentUser, session: DbSe
     row = session.scalar(
         select(Recommendation)
         .options(joinedload(Recommendation.author), joinedload(Recommendation.place))
-        .where(Recommendation.id == recommendation_id, recommendation_visible_to(user.id))
+        .where(Recommendation.id == recommendation_id, recommendation_readable(user.id))
     )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Рекомендация не найдена")
@@ -726,7 +758,7 @@ def update_recommendation(
     recommendation_id: int, body: RecommendationUpdate, user: CurrentUser, session: DbSession
 ) -> RecommendationOut:
     row = author_recommendation(session, recommendation_id, user)
-    if body.visibility in {"friends", "close"} and body.audience:
+    if body.visibility in {"friends", "close", "everyone"} and body.audience:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Список нужен только для выбранных пользователей")
     selected = audience_friends(session, user, body.audience) if body.visibility in {"allow", "deny"} else []
     row.text = body.text
@@ -810,6 +842,17 @@ def stored_photo(name: str) -> Path:
     return path
 
 
+def readable_recommendation(session: Session, recommendation_id: int, user: User) -> Recommendation:
+    row = session.scalar(
+        select(Recommendation)
+        .options(joinedload(Recommendation.author), joinedload(Recommendation.place))
+        .where(Recommendation.id == recommendation_id, recommendation_readable(user.id))
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Рекомендация не найдена")
+    return row
+
+
 def visible_recommendation(session: Session, recommendation_id: int, user: User) -> Recommendation:
     row = session.scalar(
         select(Recommendation)
@@ -857,7 +900,7 @@ async def add_recommendation_photo(
 def recommendation_photo(
     recommendation_id: int, photo_id: int, user: CurrentUser, session: DbSession
 ) -> FileResponse:
-    visible_recommendation(session, recommendation_id, user)
+    readable_recommendation(session, recommendation_id, user)
     photo = session.get(RecommendationPhoto, photo_id)
     if photo is None or photo.recommendation_id != recommendation_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Фото нет")
@@ -880,7 +923,7 @@ def audience_friends(session: Session, user: User, usernames: list[str]) -> list
 
 @router.post("/recommendations", status_code=status.HTTP_201_CREATED)
 def create_recommendation(body: RecommendationIn, user: CurrentUser, session: DbSession) -> RecommendationOut:
-    if body.visibility in {"friends", "close"} and body.audience:
+    if body.visibility in {"friends", "close", "everyone"} and body.audience:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Список нужен только для выбранных пользователей")
     if body.draft and body.publish_at is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "У черновика нет времени публикации")
