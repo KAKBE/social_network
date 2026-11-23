@@ -211,6 +211,7 @@ watch(
           <option value="allow">Только выбранные друзья</option>
           <option value="deny">Все друзья, кроме выбранных</option>
           <option value="everyone">Все</option>
+          <option value="self">Только я</option>
         </select>
       </label>
       <fieldset v-if="visibility === 'allow' || visibility === 'deny'">

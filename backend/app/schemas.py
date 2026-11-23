@@ -225,7 +225,7 @@ class RecommendationIn(BaseModel):
     lon: float = Field(ge=-180, le=180)
     text: str = Field(min_length=1, max_length=2000)
     point_corrected: bool = False
-    visibility: Literal["friends", "close", "allow", "deny", "everyone"] = "friends"
+    visibility: Literal["friends", "close", "allow", "deny", "everyone", "self"] = "friends"
     category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
     draft: bool = False
@@ -260,7 +260,7 @@ class RecommendationIn(BaseModel):
 class RecommendationUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2000)
-    visibility: Literal["friends", "close", "allow", "deny", "everyone"] = "friends"
+    visibility: Literal["friends", "close", "allow", "deny", "everyone", "self"] = "friends"
     category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
 
@@ -286,6 +286,17 @@ class RecommendationUpdate(BaseModel):
             if not LOGIN_PATTERN.fullmatch(name):
                 raise ValueError("Некорректное имя пользователя")
         return value
+
+
+class CategoryManageIn(BaseModel):
+    action: Literal["visibility", "clear", "delete"]
+    visibility: Literal["friends", "close", "everyone", "self"] | None = None
+
+    @model_validator(mode="after")
+    def visibility_when_needed(self) -> "CategoryManageIn":
+        if self.action == "visibility" and self.visibility is None:
+            raise ValueError("Выберите, кто видит")
+        return self
 
 
 class GeocodeIn(BaseModel):

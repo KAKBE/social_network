@@ -3,7 +3,7 @@ import io
 import secrets
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, assert_never
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -37,6 +37,7 @@ from app.models import (
 from app.schemas import (
     PLACE_CATEGORIES,
     AddPlaceIn,
+    CategoryManageIn,
     ClientConfigOut,
     CloseFriendIn,
     FriendOut,
@@ -758,7 +759,7 @@ def update_recommendation(
     recommendation_id: int, body: RecommendationUpdate, user: CurrentUser, session: DbSession
 ) -> RecommendationOut:
     row = author_recommendation(session, recommendation_id, user)
-    if body.visibility in {"friends", "close", "everyone"} and body.audience:
+    if body.visibility in {"friends", "close", "everyone", "self"} and body.audience:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Список нужен только для выбранных пользователей")
     selected = audience_friends(session, user, body.audience) if body.visibility in {"allow", "deny"} else []
     row.text = body.text
@@ -782,9 +783,21 @@ def remove_photo_file(name: str) -> None:
         path.unlink()
 
 
-@router.delete("/recommendations/{recommendation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_recommendation(recommendation_id: int, user: CurrentUser, session: DbSession) -> Response:
-    row = author_recommendation(session, recommendation_id, user)
+def author_category_rows(session: Session, user: User, category: str) -> list[Recommendation]:
+    if category not in PLACE_CATEGORIES:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Такой категории нет")
+    return list(
+        session.scalars(
+            select(Recommendation)
+            .options(joinedload(Recommendation.place))
+            .where(Recommendation.author_id == user.id, Recommendation.category == category)
+        )
+        .unique()
+        .all()
+    )
+
+
+def delete_owned_recommendation(session: Session, row: Recommendation) -> list[str]:
     photos = session.scalars(
         select(RecommendationPhoto.stored_name).where(RecommendationPhoto.recommendation_id == row.id)
     ).all()
@@ -798,6 +811,43 @@ def delete_recommendation(recommendation_id: int, user: CurrentUser, session: Db
     session.flush()
     if not others:
         session.delete(place)
+    return list(photos)
+
+
+@router.post("/me/categories/{category}")
+def manage_category(category: str, body: CategoryManageIn, user: CurrentUser, session: DbSession) -> dict[str, int]:
+    rows = author_category_rows(session, user, category)
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "В этой категории нет рекомендаций")
+    photo_names: list[str] = []
+    match body.action:
+        case "visibility":
+            if body.visibility is None:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Выберите, кто видит")
+            chosen = body.visibility
+            ids = [row.id for row in rows]
+            session.execute(delete(RecommendationAudience).where(RecommendationAudience.recommendation_id.in_(ids)))
+            for row in rows:
+                row.visibility = chosen
+        case "clear":
+            for row in rows:
+                row.category = None
+        case "delete":
+            for row in rows:
+                photo_names.extend(delete_owned_recommendation(session, row))
+        case _ as unreachable:
+            assert_never(unreachable)
+    changed = len(rows)
+    session.commit()
+    for name in photo_names:
+        remove_photo_file(name)
+    return {"changed": changed}
+
+
+@router.delete("/recommendations/{recommendation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_recommendation(recommendation_id: int, user: CurrentUser, session: DbSession) -> Response:
+    row = author_recommendation(session, recommendation_id, user)
+    photos = delete_owned_recommendation(session, row)
     session.commit()
     for name in photos:
         remove_photo_file(name)
@@ -923,7 +973,7 @@ def audience_friends(session: Session, user: User, usernames: list[str]) -> list
 
 @router.post("/recommendations", status_code=status.HTTP_201_CREATED)
 def create_recommendation(body: RecommendationIn, user: CurrentUser, session: DbSession) -> RecommendationOut:
-    if body.visibility in {"friends", "close", "everyone"} and body.audience:
+    if body.visibility in {"friends", "close", "everyone", "self"} and body.audience:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Список нужен только для выбранных пользователей")
     if body.draft and body.publish_at is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "У черновика нет времени публикации")

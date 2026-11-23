@@ -10,7 +10,7 @@ const props = defineProps({
   showListButton: { type: Boolean, default: true },
   closable: { type: Boolean, default: false },
 });
-const emit = defineEmits(["show-on-map", "close", "open", "to-list", "open-author"]);
+const emit = defineEmits(["show-on-map", "close", "open", "to-list", "open-author", "edit"]);
 
 const savedIn = computed(() =>
   props.lists.filter((l) => l.places.some((p) => p.id === props.item.place.id)).map((l) => l.title),
@@ -68,6 +68,7 @@ onBeforeUnmount(releasePhoto);
     <p v-if="savedIn.length" class="saved">Сохранено: {{ savedIn.join(", ") }}</p>
     <div class="card-actions">
       <button class="secondary" @click="emit('open')">Открыть</button>
+      <button v-if="item.is_own" class="secondary" @click="emit('edit')">Изменить</button>
       <button v-if="showMapButton" class="secondary" @click="emit('show-on-map', item)">На карте</button>
       <button v-if="showListButton" @click="emit('to-list', item.place)">В список</button>
     </div>

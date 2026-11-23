@@ -224,13 +224,17 @@ function closeProfile() {
   tab.value = profileReturn.value || "feed";
 }
 
-function openRecommendation(item) {
+const editOnOpen = ref(false);
+
+function openRecommendation(item, editing = false) {
+  editOnOpen.value = Boolean(editing && item.is_own);
   openedFrom.value = tab.value === "profile" ? "profile" : tab.value;
   opened.value = item;
   tab.value = "recommendation";
 }
 
 function closeRecommendation() {
+  editOnOpen.value = false;
   tab.value = openedFrom.value || "feed";
 }
 
@@ -258,6 +262,20 @@ watch(tab, (value) => {
 
 async function applyFeedFilters() {
   await ensureUnseen();
+}
+
+async function refreshFeed() {
+  try {
+    const [response, myLists] = await Promise.all([api.feedWithTiming(), api.lists()]);
+    feed.value = response.data;
+    lists.value = myLists;
+    if (selected.value) {
+      selected.value = feed.value.find((row) => row.id === selected.value.id) ?? null;
+    }
+    if (tab.value === "feed") await ensureUnseen();
+  } catch (e) {
+    flash(e.message);
+  }
 }
 
 async function onLiked(item) {
@@ -359,6 +377,7 @@ onUnmounted(() => clearInterval(poll));
             closable
             @to-list="openListPicker"
             @open="openRecommendation(selected)"
+            @edit="openRecommendation(selected, true)"
             @open-author="openProfile"
             @close="selected = null"
           />
@@ -396,6 +415,7 @@ onUnmounted(() => clearInterval(poll));
           show-map-button
           @to-list="openListPicker"
           @open="openRecommendation(item)"
+          @edit="openRecommendation(item, true)"
           @open-author="openProfile"
           @show-on-map="showOnMap($event.place)"
         />
@@ -413,11 +433,13 @@ onUnmounted(() => clearInterval(poll));
         :config="config"
         @back="closeProfile"
         @open="openRecommendation"
+        @edit="openRecommendation($event, true)"
         @open-profile="openProfile"
         @to-list="openListPicker"
         @settings="tab = 'settings'"
         @saved="onProfileSaved"
         @add="tab = 'add'"
+        @managed="refreshFeed"
         @show-on-map="showOnMap($event.place)"
       />
       <RecommendationView
@@ -426,6 +448,7 @@ onUnmounted(() => clearInterval(poll));
         v-show="tab === 'recommendation'"
         :item="opened"
         :lists="lists"
+        :edit-on-open="editOnOpen"
         @back="closeRecommendation"
         @open-author="openProfile"
         @liked="onLiked"

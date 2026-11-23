@@ -6,6 +6,7 @@ import { PLACE_CATEGORIES } from "../categories.js";
 const props = defineProps({
   item: { type: Object, required: true },
   lists: { type: Array, required: true },
+  editOnOpen: { type: Boolean, default: false },
 });
 const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted", "open-author"]);
 
@@ -54,15 +55,18 @@ async function openPage(item) {
   try {
     current.value = await api.recommendation(item.id);
     emit("seen", item.id);
+    if (props.editOnOpen && current.value.is_own) await startEdit();
   } catch (err) {
     error.value = err.message;
   }
 }
 
 watch(
-  () => props.item.id,
-  () => {
-    openPage(props.item);
+  () => [props.item.id, props.editOnOpen],
+  ([id, editing], previous) => {
+    const openedAnother = !previous || previous[0] !== id;
+    const askedToEdit = Boolean(editing) && (!previous || !previous[1]);
+    if (openedAnother || askedToEdit) openPage(props.item);
   },
   { immediate: true },
 );
@@ -171,6 +175,7 @@ async function remove() {
           <option value="allow">Только выбранные друзья</option>
           <option value="deny">Все друзья, кроме выбранных</option>
           <option value="everyone">Все</option>
+          <option value="self">Только я</option>
         </select>
       </label>
       <fieldset v-if="visibility === 'allow' || visibility === 'deny'">

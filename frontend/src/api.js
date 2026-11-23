@@ -116,6 +116,7 @@ export const api = {
   },
   recommendation: (id) => request("GET", `/api/recommendations/${id}`),
   updateRecommendation: (id, body) => request("PATCH", `/api/recommendations/${id}`, body),
+  manageCategory: (category, body) => request("POST", `/api/me/categories/${category}`, body),
   deleteRecommendation: (id) => request("DELETE", `/api/recommendations/${id}`),
   publishRecommendation: (id) => request("POST", `/api/recommendations/${id}/publish`),
   toggleLike: (id) => request("POST", `/api/recommendations/${id}/like`),

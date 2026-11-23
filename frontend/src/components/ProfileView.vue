@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api.js";
-import { PLACE_CATEGORIES } from "../categories.js";
+import { PLACE_CATEGORIES, categoryLabel } from "../categories.js";
 import { canOpenProfileMap, postsForChip } from "../profileMap.js";
 import MapView from "./MapView.vue";
 import RecommendationCard from "./RecommendationCard.vue";
@@ -12,13 +12,15 @@ const props = defineProps({
   config: { type: Object, required: true },
   active: { type: Boolean, default: true },
 });
-const emit = defineEmits(["back", "open", "open-profile", "to-list", "settings", "saved", "add", "show-on-map"]);
+const emit = defineEmits(["back", "open", "edit", "open-profile", "to-list", "settings", "saved", "add", "show-on-map", "managed"]);
 
 const page = ref(null);
 const posts = ref([]);
 const error = ref("");
 const chip = ref("all");
 const showMap = ref(false);
+const categoryVisibility = ref("friends");
+const categoryBusy = ref(false);
 const editing = ref(false);
 const showAllFriends = ref(false);
 const busy = ref(false);
@@ -46,6 +48,11 @@ const hasDrafts = computed(() => posts.value.some((post) => post.status === "dra
 const publishedCount = computed(() => posts.value.filter((post) => post.status !== "draft").length);
 const visiblePosts = computed(() => postsForChip(posts.value, chip.value));
 const canMap = computed(() => canOpenProfileMap(posts.value, chip.value));
+const categoryPosts = computed(() => posts.value.filter((post) => post.category === chip.value));
+const categoryDraftCount = computed(() => categoryPosts.value.filter((post) => post.status === "draft").length);
+const categoryHidden = computed(
+  () => categoryPosts.value.length > 0 && categoryPosts.value.every((post) => post.visibility === "self"),
+);
 
 function releaseFaces() {
   if (ownUrl) URL.revokeObjectURL(ownUrl);
@@ -116,6 +123,19 @@ watch(canMap, (allowed) => {
   if (!allowed) showMap.value = false;
 });
 
+watch(posts, () => {
+  if (chip.value === "all" || chip.value === "drafts") return;
+  const stillPublished = posts.value.some((post) => post.category === chip.value && post.status !== "draft");
+  if (!stillPublished) chip.value = "all";
+});
+
+watch(categoryPosts, (rows) => {
+  if (!rows.length) return;
+  const values = new Set(rows.map((post) => post.visibility));
+  const only = values.size === 1 ? [...values][0] : "";
+  if (["self", "friends", "close", "everyone"].includes(only)) categoryVisibility.value = only;
+});
+
 watch(
   () => [props.publicId, props.active],
   ([id, active], previous) => {
@@ -134,6 +154,29 @@ watch(
 );
 
 onBeforeUnmount(releaseFaces);
+
+function chooseCategory(next) {
+  chip.value = next;
+  const rows = posts.value.filter((post) => post.category === next);
+  const values = new Set(rows.map((post) => post.visibility));
+  const only = values.size === 1 ? [...values][0] : "";
+  categoryVisibility.value = ["self", "friends", "close", "everyone"].includes(only) ? only : "friends";
+}
+
+async function runCategory(body, confirmText) {
+  if (confirmText && !window.confirm(confirmText)) return;
+  error.value = "";
+  categoryBusy.value = true;
+  try {
+    await api.manageCategory(chip.value, body);
+    await load();
+    emit("managed");
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    categoryBusy.value = false;
+  }
+}
 
 async function onAvatar(event) {
   const file = event.target.files?.[0];
@@ -289,7 +332,7 @@ async function toggleClose() {
           type="button"
           class="chip"
           :class="{ active: chip === item.id }"
-          @click="chip = item.id"
+          @click="chooseCategory(item.id)"
         >
           {{ item.label }}
         </button>
@@ -297,6 +340,46 @@ async function toggleClose() {
           Черновики
         </button>
       </div>
+      <section v-if="page.is_self && categoryPosts.length" class="category-tools">
+        <p class="muted">
+          {{ categoryLabel(chip) }} · {{ categoryPosts.length }}
+          <template v-if="categoryDraftCount">, из них черновиков {{ categoryDraftCount }}</template>
+          <template v-if="categoryHidden"> · скрыто, видите только вы</template>
+        </p>
+        <p class="muted">Если постов в категории не останется, она пропадёт. Её снова можно поставить при правке поста.</p>
+        <label>
+          Кто видит
+          <select v-model="categoryVisibility">
+            <option value="self">Только я</option>
+            <option value="friends">Друзья</option>
+            <option value="close">Близкие друзья</option>
+            <option value="everyone">Все</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button type="button" :disabled="categoryBusy" @click="runCategory({ action: 'visibility', visibility: categoryVisibility })">
+            Применить ко всем
+          </button>
+          <button type="button" :disabled="categoryBusy || categoryHidden" @click="runCategory({ action: 'visibility', visibility: 'self' })">
+            Скрыть
+          </button>
+          <button
+            type="button"
+            :disabled="categoryBusy"
+            @click="runCategory({ action: 'clear' }, `Убрать категорию «${categoryLabel(chip)}»? Посты останутся без категории.`)"
+          >
+            Убрать категорию
+          </button>
+          <button
+            type="button"
+            class="danger"
+            :disabled="categoryBusy"
+            @click="runCategory({ action: 'delete' }, `Удалить категорию «${categoryLabel(chip)}» вместе с ${categoryPosts.length} постами?`)"
+          >
+            Удалить с постами
+          </button>
+        </div>
+      </section>
       <button v-if="page.is_self && chip === 'all' && !posts.length" class="empty-feed" @click="emit('add')">
         Рекомендаций нет, но вы можете добавить свою
       </button>
@@ -326,6 +409,7 @@ async function toggleClose() {
         :show-map-button="item.on_map"
         :show-list-button="item.on_map"
         @open="emit('open', item)"
+        @edit="emit('edit', item)"
         @open-author="emit('open-profile', $event)"
         @to-list="emit('to-list', $event)"
         @show-on-map="emit('show-on-map', $event)"
