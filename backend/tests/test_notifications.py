@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.db import SessionLocal
 from app.main import app
@@ -66,6 +66,9 @@ def run_worker(*args: str, timeout: float = 20) -> subprocess.CompletedProcess[s
 
 def test_friend_notification_job_survives_claim_loss(monkeypatch) -> None:
     monkeypatch.setenv("NOTIFY_LEASE_SECONDS", "1")
+    with SessionLocal() as session:
+        database = session.execute(text("select current_database()")).scalar()
+    assert str(database).endswith("_test")
     reset_and_seed()
     client = TestClient(app)
     lesha = login(client, "lesha")

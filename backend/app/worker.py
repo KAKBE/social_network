@@ -3,18 +3,23 @@
 import argparse
 import json
 import os
+import re
 import socket
 import time
 
 from app.db import SessionLocal
 from app.notify import claim_job, complete_job, job_snapshot, log
 
+_URL = re.compile(r"postgresql(?:\+\w+)?://\S+")
+_SECRET = re.compile(r"(?i)(password\s*[=:]\s*)(\S+)")
 
-def process_one(worker_id: str, *, crash: bool, hold: float) -> int:
+
+def process_one(worker_id: str, *, crash: bool, hold: float, log_idle: bool = True) -> int:
     with SessionLocal() as session:
         job = claim_job(session, worker_id)
     if job is None:
-        log("event=idle")
+        if log_idle:
+            log("event=idle")
         return 0
     if crash:
         log(f"job_id={job.id} event=crash-after-claim")
@@ -25,6 +30,30 @@ def process_one(worker_id: str, *, crash: bool, hold: float) -> int:
     with SessionLocal() as session:
         result = complete_job(session, job.id, job.claim_token or "")
     return 0 if result == "done" else 2
+
+
+def public_error(exc: BaseException) -> str:
+    """Keep a database password out of the worker log."""
+    text = " ".join(str(exc).split())
+    text = _URL.sub("postgresql://***", text)
+    text = _SECRET.sub(r"\1***", text)
+    return text[:240]
+
+
+def serve(worker_id: str, *, pause_s: float = 1.0, cycles: int | None = None) -> None:
+    """Keep claiming jobs. A dead database or a missing table is a retry, not an exit."""
+    completed = 0
+    while cycles is None or completed < cycles:
+        pause = pause_s
+        try:
+            process_one(worker_id, crash=False, hold=0, log_idle=False)
+        except Exception as exc:
+            log(f"event=retry error={public_error(exc)}")
+            pause = max(pause_s, 5.0)
+        completed += 1
+        if cycles is not None and completed >= cycles:
+            return
+        time.sleep(pause)
 
 
 def show_status(job_id: int) -> int:
@@ -49,9 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         return show_status(args.status)
     if args.once or args.crash_after_claim or args.hold_after_claim:
         return process_one(args.worker, crash=args.crash_after_claim, hold=args.hold_after_claim)
-    while True:
-        process_one(args.worker, crash=False, hold=0)
-        time.sleep(1)
+    serve(args.worker)
 
 
 if __name__ == "__main__":

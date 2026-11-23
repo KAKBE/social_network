@@ -16,5 +16,18 @@ services:
       timeout: 3s
       retries: 30
 
+  # Separate from the API. The URL is fixed: a host DATABASE_URL must not redirect this process.
+  worker:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://posledu:posledu@db:5432/posledu
+      NOTIFY_LEASE_SECONDS: "30"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./backend/app:/app/app:ro
+
 volumes:
   pgdata:
