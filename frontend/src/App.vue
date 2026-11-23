@@ -17,7 +17,7 @@ const TABS = [
   { id: "map", title: "Карта" },
   { id: "feed", title: "Лента" },
   { id: "add", title: "Добавить" },
-  { id: "lists", title: "Списки" },
+  { id: "lists", title: "Избранное" },
 ];
 
 // Only a page load that starts already logged in is a valid K2 sample: otherwise login time is included.
@@ -184,6 +184,23 @@ async function confirmListAdd(listId) {
   if (!pendingPlace.value?.id) return;
   const saved = await saveToList(listId, pendingPlace.value.id);
   if (saved) pendingPlace.value = null;
+}
+
+async function renameList(listId, title) {
+  try {
+    upsertList(await api.renameList(listId, title));
+  } catch (e) {
+    flash(e.message);
+  }
+}
+
+async function deleteList(listId) {
+  try {
+    await api.deleteList(listId);
+    lists.value = lists.value.filter((row) => row.id !== listId);
+  } catch (e) {
+    flash(e.message);
+  }
 }
 
 async function createList(title) {
@@ -421,7 +438,7 @@ onUnmounted(() => clearInterval(poll));
         />
       </section>
 
-      <AddView v-show="tab === 'add'" :config="config" :active="tab === 'add'" @created="onCreated" />
+      <AddView v-show="tab === 'add'" :config="config" :lists="lists" :active="tab === 'add'" @created="onCreated" />
 
       <SearchView v-show="tab === 'search'" @open-profile="openProfile" />
       <ProfileView
@@ -463,6 +480,8 @@ onUnmounted(() => clearInterval(poll));
         :lists="lists"
         :pending="pendingPlace"
         @create="createList"
+        @rename="renameList"
+        @delete="deleteList"
         @add="confirmListAdd"
         @remove="removeFromList"
         @show-on-map="showOnMap"

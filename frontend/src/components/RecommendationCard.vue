@@ -70,7 +70,7 @@ onBeforeUnmount(releasePhoto);
       <button class="secondary" @click="emit('open')">Открыть</button>
       <button v-if="item.is_own" class="secondary" @click="emit('edit')">Изменить</button>
       <button v-if="showMapButton" class="secondary" @click="emit('show-on-map', item)">На карте</button>
-      <button v-if="showListButton" @click="emit('to-list', item.place)">В список</button>
+      <button v-if="showListButton" @click="emit('to-list', item.place)">В избранное</button>
     </div>
   </article>
 </template>

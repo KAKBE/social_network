@@ -209,7 +209,7 @@ async function remove() {
       <button v-if="current.is_own && !editing" class="danger" :disabled="busy" @click="remove">Удалить</button>
       <button v-if="current.is_own && !editing && current.status === 'draft'" class="primary" @click="publish">Опубликовать</button>
       <button v-if="current.on_map" @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
-      <button v-if="current.on_map" @click="emit('to-list', current.place)">В список</button>
+      <button v-if="current.on_map" @click="emit('to-list', current.place)">В избранное</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
   </section>

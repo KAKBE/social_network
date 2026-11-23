@@ -393,10 +393,25 @@ button.note {
   margin: 0;
 }
 
+.list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.list-head h3,
+.list-head .search,
+.list-head .actions {
+  margin: 0;
+}
+
 .list-places li {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .sheet {

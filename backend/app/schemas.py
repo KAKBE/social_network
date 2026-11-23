@@ -329,6 +329,14 @@ class ReverseOut(BaseModel):
 class PlaceListIn(BaseModel):
     title: str = Field(min_length=1, max_length=100)
 
+    @field_validator("title")
+    @classmethod
+    def plain_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Заполните поле")
+        return value
+
 
 class SavedPlaceOut(BaseModel):
     id: int | None

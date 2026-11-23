@@ -1146,7 +1146,7 @@ def load_list_out(session: Session, place_list: PlaceList, user: User) -> PlaceL
 def owned_list(session: Session, list_id: int, user: User) -> PlaceList:
     place_list = session.get(PlaceList, list_id)
     if place_list is None or place_list.owner_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Список не найден")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Подборка не найдена")
     return place_list
 
 
@@ -1167,6 +1167,35 @@ def create_list(body: PlaceListIn, user: CurrentUser, session: DbSession) -> Pla
     session.add(place_list)
     session.commit()
     return load_list_out(session, place_list, user)
+
+
+@router.patch("/lists/{list_id}")
+def rename_list(list_id: int, body: PlaceListIn, user: CurrentUser, session: DbSession) -> PlaceListOut:
+    place_list = owned_list(session, list_id, user)
+    taken = session.scalar(
+        select(PlaceList).where(
+            PlaceList.owner_id == user.id,
+            PlaceList.title == body.title,
+            PlaceList.id != place_list.id,
+        )
+    )
+    if taken is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такое название уже есть")
+    place_list.title = body.title
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такое название уже есть") from None
+    return load_list_out(session, place_list, user)
+
+
+@router.delete("/lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_list(list_id: int, user: CurrentUser, session: DbSession) -> Response:
+    place_list = owned_list(session, list_id, user)
+    session.delete(place_list)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/lists/{list_id}/places")

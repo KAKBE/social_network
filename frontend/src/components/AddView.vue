@@ -7,6 +7,7 @@ import { PLACE_CATEGORIES } from "../categories.js";
 const props = defineProps({
   config: { type: Object, required: true },
   active: { type: Boolean, default: true },
+  lists: { type: Array, required: true },
 });
 const emit = defineEmits(["created"]);
 
@@ -28,7 +29,6 @@ const visibility = ref("friends");
 const category = ref("");
 const audience = ref([]);
 const files = ref([]);
-const lists = ref([]);
 const listId = ref("");
 const draft = ref(false);
 const publishAt = ref("");
@@ -148,8 +148,14 @@ async function publish() {
 
 async function loadFriends() {
   friends.value = await api.friends();
-  lists.value = await api.lists();
 }
+
+watch(
+  () => props.lists,
+  (rows) => {
+    if (listId.value && !rows.some((row) => String(row.id) === listId.value)) listId.value = "";
+  },
+);
 
 onMounted(() => {
   loadFriends().catch(() => {});
@@ -222,10 +228,10 @@ watch(
         </label>
       </fieldset>
       <label>
-        Список
+        Избранное
         <select v-model="listId">
           <option value="">Не добавлять</option>
-          <option v-for="list in lists" :key="list.id" :value="String(list.id)">{{ list.title }}</option>
+          <option v-for="list in props.lists" :key="list.id" :value="String(list.id)">{{ list.title }}</option>
         </select>
       </label>
       <label><input v-model="draft" type="checkbox" /> Сохранить как черновик</label>
