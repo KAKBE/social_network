@@ -1,7 +1,8 @@
 <script setup>
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api.js";
-import { PLACE_CATEGORIES } from "../categories.js";
+import { categoryChoices } from "../categories.js";
+import Icon from "./Icon.vue";
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -12,7 +13,7 @@ const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted", "open-a
 
 const current = ref(props.item);
 const error = ref("");
-const photoUrls = ref([]);
+const photos = ref([]);
 const editing = ref(false);
 const busy = ref(false);
 const friends = ref([]);
@@ -20,21 +21,43 @@ const name = ref("");
 const text = ref("");
 const visibility = ref("friends");
 const category = ref("");
+const extraCategories = ref([]);
+const choices = computed(() => categoryChoices(extraCategories.value));
 const audience = ref([]);
 
+let photoGeneration = 0;
+
 function revokePhotos() {
-  for (const url of photoUrls.value) URL.revokeObjectURL(url);
-  photoUrls.value = [];
+  for (const photo of photos.value) URL.revokeObjectURL(photo.url);
+  photos.value = [];
+}
+
+function releasePending(pending) {
+  for (const photo of pending) URL.revokeObjectURL(photo.url);
 }
 
 async function loadPhotos(item) {
-  revokePhotos();
-  const urls = [];
-  for (const photo of item.photos ?? []) {
-    const blob = await api.recommendationPhotoBlob(item.id, photo.id);
-    urls.push(URL.createObjectURL(blob));
+  const generation = ++photoGeneration;
+  const next = [];
+  try {
+    for (const photo of item.photos ?? []) {
+      const blob = await api.recommendationPhotoBlob(item.id, photo.id);
+      if (generation !== photoGeneration) {
+        releasePending(next);
+        return;
+      }
+      next.push({ id: photo.id, url: URL.createObjectURL(blob) });
+    }
+  } catch (err) {
+    releasePending(next);
+    throw err;
   }
-  photoUrls.value = urls;
+  if (generation !== photoGeneration) {
+    releasePending(next);
+    return;
+  }
+  revokePhotos();
+  photos.value = next;
 }
 
 watch(
@@ -104,6 +127,20 @@ async function addPhoto(event) {
   }
 }
 
+async function replacePhoto(photoId, event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  error.value = "";
+  try {
+    current.value = await api.replaceRecommendationPhoto(current.value.id, photoId, file);
+    emit("liked", current.value);
+    await loadPhotos(current.value);
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
 async function startEdit() {
   error.value = "";
   name.value = current.value.place.name;
@@ -113,7 +150,9 @@ async function startEdit() {
   audience.value = [...(current.value.audience ?? [])];
   editing.value = true;
   try {
-    friends.value = await api.friends();
+    const [people, categories] = await Promise.all([api.friends(), api.myCategories()]);
+    friends.value = people;
+    extraCategories.value = categories;
   } catch (err) {
     error.value = err.message;
   }
@@ -155,16 +194,45 @@ async function remove() {
 </script>
 
 <template>
-  <section class="page">
-    <button class="link" @click="emit('back')">Назад</button>
-    <form v-if="editing" class="stack" @submit.prevent="saveEdit">
+  <section class="page post-page">
+    <div class="post-top">
+      <button class="link" type="button" @click="emit('back')">Назад</button>
+      <div v-if="!editing" class="card-tools">
+        <button v-if="current.is_own" class="icon" type="button" aria-label="Изменить" @click="startEdit">
+          <Icon name="pencil" />
+        </button>
+        <button
+          v-if="current.on_map"
+          class="icon like"
+          :class="{ liked: current.liked }"
+          type="button"
+          :aria-label="current.liked ? 'Убрать лайк' : 'Лайк'"
+          :aria-pressed="current.liked"
+          @click="like"
+        >
+          <Icon :name="current.liked ? 'heart-filled' : 'heart'" />
+          <span>{{ current.like_count }}</span>
+        </button>
+        <button
+          v-if="current.on_map"
+          class="icon saved-action"
+          type="button"
+          aria-label="В избранное"
+          @click="emit('to-list', current.place)"
+        >
+          <Icon name="bookmark" />
+        </button>
+      </div>
+    </div>
+    <form v-if="editing" class="stack edit-sheet" @submit.prevent="saveEdit">
+      <h2>Изменение</h2>
       <label>Название <input v-model="name" maxlength="200" required /></label>
       <label>Рекомендация <textarea v-model="text" rows="4" maxlength="2000" required /></label>
       <label>
         Категория
         <select v-model="category">
           <option value="">Без категории</option>
-          <option v-for="item in PLACE_CATEGORIES" :key="item.id" :value="item.id">{{ item.label }}</option>
+          <option v-for="item in choices" :key="item.id" :value="item.id">{{ item.label }}</option>
         </select>
       </label>
       <label>
@@ -185,32 +253,40 @@ async function remove() {
           {{ friend.display_name }} @{{ friend.username }}
         </label>
       </fieldset>
-      <button class="primary" :disabled="busy">Сохранить</button>
-      <button type="button" class="link" @click="editing = false">Отмена</button>
+      <div v-if="photos.length" class="photo-row">
+        <figure v-for="photo in photos" :key="photo.id" class="photo-frame">
+          <img :src="photo.url" alt="Фото места" />
+          <label class="photo-replace">
+            Заменить
+            <input class="file-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="replacePhoto(photo.id, $event)" />
+          </label>
+        </figure>
+      </div>
+      <label v-if="(current.photos?.length ?? 0) < 5" class="photo-add">
+        <Icon name="image" />
+        Добавить фото
+        <input class="file-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="addPhoto" />
+      </label>
+      <div class="actions">
+        <button class="primary" :disabled="busy">Сохранить</button>
+        <button v-if="current.status === 'draft'" type="button" :disabled="busy" @click="publish">Опубликовать</button>
+        <button type="button" class="link" @click="editing = false">Отмена</button>
+      </div>
+      <button type="button" class="danger" :disabled="busy" @click="remove">Удалить рекомендацию</button>
     </form>
     <template v-else>
       <h2>{{ current.place.name }}</h2>
       <p v-if="current.place.address" class="muted">{{ current.place.address }}</p>
       <p v-if="current.text">{{ current.text }}</p>
+      <div v-if="photos.length" class="photo-row">
+        <img v-for="photo in photos" :key="photo.id" :src="photo.url" alt="Фото места" />
+      </div>
+      <p>
+        <button class="link" type="button" @click="emit('open-author', current.author.public_id)">{{ current.author.display_name }}</button>
+        <span class="muted"> @{{ current.author.username }}</span>
+      </p>
+      <button v-if="current.is_own && current.status === 'draft'" class="primary" type="button" @click="publish">Опубликовать</button>
     </template>
-    <div v-if="photoUrls.length" class="photo-row">
-      <img v-for="url in photoUrls" :key="url" :src="url" alt="Фото места" />
-    </div>
-    <label v-if="current.is_own && (current.photos?.length ?? 0) < 5">
-      Фото
-      <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="addPhoto" />
-    </label>
-    <p>
-      <button class="link" @click="emit('open-author', current.author.public_id)">{{ current.author.display_name }}</button>
-      <span class="muted"> @{{ current.author.username }}</span>
-    </p>
-    <div class="actions">
-      <button v-if="current.is_own && !editing" @click="startEdit">Изменить</button>
-      <button v-if="current.is_own && !editing" class="danger" :disabled="busy" @click="remove">Удалить</button>
-      <button v-if="current.is_own && !editing && current.status === 'draft'" class="primary" @click="publish">Опубликовать</button>
-      <button v-if="current.on_map" @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
-      <button v-if="current.on_map" @click="emit('to-list', current.place)">В избранное</button>
-    </div>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 </template>

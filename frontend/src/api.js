@@ -65,11 +65,11 @@ async function sendForm(method, path, body) {
   return data;
 }
 
-async function requestBlob(path) {
+async function requestBlob(path, cache = "default") {
   const headers = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(path, { headers });
+  const response = await fetch(path, { headers, cache });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new ApiError(response.status, messageFrom(data, response.status));
@@ -116,7 +116,11 @@ export const api = {
   },
   recommendation: (id) => request("GET", `/api/recommendations/${id}`),
   updateRecommendation: (id, body) => request("PATCH", `/api/recommendations/${id}`, body),
-  manageCategory: (category, body) => request("POST", `/api/me/categories/${category}`, body),
+  myCategories: () => request("GET", "/api/me/categories"),
+  createCategory: (title) => request("POST", "/api/me/categories", { title }),
+  renameCategory: (category, title) => request("PATCH", `/api/me/categories/${encodeURIComponent(category)}`, { title }),
+  deleteCategory: (category) => request("DELETE", `/api/me/categories/${encodeURIComponent(category)}`),
+  manageCategory: (category, body) => request("POST", `/api/me/categories/${encodeURIComponent(category)}`, body),
   deleteRecommendation: (id) => request("DELETE", `/api/recommendations/${id}`),
   publishRecommendation: (id) => request("POST", `/api/recommendations/${id}/publish`),
   toggleLike: (id) => request("POST", `/api/recommendations/${id}/like`),
@@ -125,7 +129,13 @@ export const api = {
     body.append("file", file);
     return sendForm("POST", `/api/recommendations/${id}/photos`, body);
   },
-  recommendationPhotoBlob: (id, photoId) => requestBlob(`/api/recommendations/${id}/photos/${photoId}`),
+  replaceRecommendationPhoto: (id, photoId, file) => {
+    const body = new FormData();
+    body.append("file", file);
+    return sendForm("PUT", `/api/recommendations/${id}/photos/${photoId}`, body);
+  },
+  recommendationPhotoBlob: (id, photoId) =>
+    requestBlob(`/api/recommendations/${id}/photos/${photoId}`, "no-store"),
   createRecommendation: (body) => request("POST", "/api/recommendations", body),
   geocode: (query) => request("POST", "/api/geocode", { query }),
   reverse: (lat, lon) => request("POST", "/api/geocode/reverse", { lat, lon }),

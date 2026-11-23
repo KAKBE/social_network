@@ -104,7 +104,7 @@ class Recommendation(Base):
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     place_id: Mapped[int] = mapped_column(ForeignKey("places.id", ondelete="CASCADE"))
     text: Mapped[str] = mapped_column(Text)
-    category: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(24), nullable=True)
     visibility: Mapped[str] = mapped_column(String(20), default="friends", server_default="friends")
     status: Mapped[str] = mapped_column(String(20), default="published", server_default="published")
     publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -153,6 +153,17 @@ class RecommendationPhoto(Base):
     recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id", ondelete="CASCADE"), index=True)
     stored_name: Mapped[str] = mapped_column(String(80))
     position: Mapped[int] = mapped_column(default=0)
+
+
+class ProfileCategory(Base):
+    """A category the author added on their own profile. Built-in labels are not rows here."""
+
+    __tablename__ = "profile_categories"
+    __table_args__ = (UniqueConstraint("owner_id", "title"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(24))
 
 
 class PlaceList(Base):

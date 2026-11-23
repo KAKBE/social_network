@@ -639,3 +639,201 @@ button.empty-feed {
   object-fit: cover;
   border-radius: 10px;
 }
+
+.post-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.post-page h2 {
+  margin-top: 0;
+}
+
+button.icon.like {
+  width: auto;
+  min-width: 44px;
+  padding: 0 8px;
+  gap: 4px;
+  display: inline-flex;
+}
+
+button.icon.like span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+button.icon.like.liked {
+  color: var(--danger);
+}
+
+.photo-frame {
+  position: relative;
+  margin: 0;
+}
+
+.photo-replace,
+.photo-add {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.photo-replace {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid var(--line);
+}
+
+.photo-add {
+  border: 1px dashed var(--line);
+  margin: 4px 0 8px;
+}
+
+.edit-sheet {
+  margin-top: 4px;
+}
+
+.post-card {
+  cursor: pointer;
+}
+
+.card-tools {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: none;
+}
+
+.card-tools button.icon,
+.list-places button.icon,
+button.icon.saved-action {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  color: var(--text);
+}
+
+.card-tools button.icon.like {
+  display: inline-flex;
+  width: auto;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+button.icon.saved,
+button.icon.saved-action {
+  color: var(--accent);
+}
+
+button.icon.danger-icon {
+  color: var(--danger);
+}
+
+button.link.title {
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0;
+}
+
+.card-menu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 3;
+  min-width: 148px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.card-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.count-pill {
+  min-width: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--badge);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.collection.chosen {
+  border-color: var(--accent);
+}
+
+.pending-place {
+  margin: 0 0 12px;
+}
+
+.place-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  min-height: 44px;
+}
+
+.place-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.segment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.segment button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.segment button.active {
+  background: var(--button-bg);
+  color: var(--button-fg);
+  border-color: transparent;
+}
+
+.category-create,
+.add-place {
+  margin-bottom: 12px;
+}
+
+.rename {
+  flex: 1;
+  margin: 0;
+}

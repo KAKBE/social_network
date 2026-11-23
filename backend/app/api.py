@@ -7,7 +7,7 @@ from typing import Annotated, assert_never
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -25,6 +25,7 @@ from app.models import (
     PerfSample,
     Place,
     PlaceList,
+    ProfileCategory,
     PlaceListItem,
     Recommendation,
     RecommendationAudience,
@@ -36,6 +37,9 @@ from app.models import (
 )
 from app.schemas import (
     PLACE_CATEGORIES,
+    PLACE_CATEGORY_LABELS,
+    CategoryOut,
+    CategoryTitleIn,
     AddPlaceIn,
     CategoryManageIn,
     ClientConfigOut,
@@ -615,11 +619,11 @@ def user_recommendations(
     session: DbSession,
     category: Annotated[str | None, Query()] = None,
 ) -> list[RecommendationOut]:
-    if category is not None and category not in PLACE_CATEGORIES:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Неизвестная категория")
     owner = session.scalar(select(User).where(User.public_id == public_id))
     if owner is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    if category is not None and not category_is_known(session, owner, category):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Неизвестная категория")
     rows = session.scalars(
         select(Recommendation)
         .options(joinedload(Recommendation.author), joinedload(Recommendation.place))
@@ -765,7 +769,7 @@ def update_recommendation(
     row.text = body.text
     row.place.name = body.name
     row.visibility = body.visibility
-    row.category = body.category
+    row.category = assignable_category(session, user, body.category)
     session.execute(delete(RecommendationAudience).where(RecommendationAudience.recommendation_id == row.id))
     session.flush()
     for friend in selected:
@@ -783,8 +787,45 @@ def remove_photo_file(name: str) -> None:
         path.unlink()
 
 
+CUSTOM_CATEGORY_LIMIT = 12
+
+
+def reserved_category_title(title: str) -> bool:
+    folded = title.casefold()
+    slugs = {item.casefold() for item in PLACE_CATEGORIES}
+    labels = {label.casefold() for label in PLACE_CATEGORY_LABELS.values()}
+    return folded in slugs or folded in labels
+
+
+def find_custom_category(session: Session, user: User, title: str) -> ProfileCategory | None:
+    return session.scalar(
+        select(ProfileCategory).where(ProfileCategory.owner_id == user.id, ProfileCategory.title == title)
+    )
+
+
+def category_is_known(session: Session, owner: User, category: str) -> bool:
+    if category in PLACE_CATEGORIES:
+        return True
+    return find_custom_category(session, owner, category) is not None
+
+
+def assignable_category(session: Session, user: User, category: str | None) -> str | None:
+    if category is None or category in PLACE_CATEGORIES:
+        return category
+    if find_custom_category(session, user, category) is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такой категории нет")
+    return category
+
+
+def owned_custom_category(session: Session, user: User, title: str) -> ProfileCategory:
+    row = find_custom_category(session, user, title)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Такой категории нет")
+    return row
+
+
 def author_category_rows(session: Session, user: User, category: str) -> list[Recommendation]:
-    if category not in PLACE_CATEGORIES:
+    if not category_is_known(session, user, category):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Такой категории нет")
     return list(
         session.scalars(
@@ -814,6 +855,72 @@ def delete_owned_recommendation(session: Session, row: Recommendation) -> list[s
     return list(photos)
 
 
+@router.get("/me/categories")
+def my_categories(user: CurrentUser, session: DbSession) -> list[CategoryOut]:
+    rows = session.scalars(
+        select(ProfileCategory).where(ProfileCategory.owner_id == user.id).order_by(ProfileCategory.id)
+    )
+    return [CategoryOut(id=row.id, title=row.title) for row in rows]
+
+
+@router.post("/me/categories", status_code=status.HTTP_201_CREATED)
+def create_category(body: CategoryTitleIn, user: CurrentUser, session: DbSession) -> CategoryOut:
+    if reserved_category_title(body.title):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Это название уже занято")
+    existing = session.scalars(select(ProfileCategory).where(ProfileCategory.owner_id == user.id)).all()
+    if any(row.title.casefold() == body.title.casefold() for row in existing):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такая категория уже есть")
+    if len(existing) >= CUSTOM_CATEGORY_LIMIT:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Категорий уже достаточно")
+    row = ProfileCategory(owner_id=user.id, title=body.title)
+    session.add(row)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такая категория уже есть") from None
+    return CategoryOut(id=row.id, title=row.title)
+
+
+@router.patch("/me/categories/{category}")
+def rename_category(category: str, body: CategoryTitleIn, user: CurrentUser, session: DbSession) -> CategoryOut:
+    row = owned_custom_category(session, user, category)
+    if body.title == row.title:
+        return CategoryOut(id=row.id, title=row.title)
+    if reserved_category_title(body.title):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Это название уже занято")
+    others = session.scalars(
+        select(ProfileCategory).where(ProfileCategory.owner_id == user.id, ProfileCategory.id != row.id)
+    ).all()
+    if any(item.title.casefold() == body.title.casefold() for item in others):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такая категория уже есть")
+    session.execute(
+        update(Recommendation)
+        .where(Recommendation.author_id == user.id, Recommendation.category == row.title)
+        .values(category=body.title)
+    )
+    row.title = body.title
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Такая категория уже есть") from None
+    return CategoryOut(id=row.id, title=row.title)
+
+
+@router.delete("/me/categories/{category}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(category: str, user: CurrentUser, session: DbSession) -> Response:
+    row = owned_custom_category(session, user, category)
+    session.execute(
+        update(Recommendation)
+        .where(Recommendation.author_id == user.id, Recommendation.category == row.title)
+        .values(category=None)
+    )
+    session.delete(row)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/me/categories/{category}")
 def manage_category(category: str, body: CategoryManageIn, user: CurrentUser, session: DbSession) -> dict[str, int]:
     rows = author_category_rows(session, user, category)
@@ -835,6 +942,8 @@ def manage_category(category: str, body: CategoryManageIn, user: CurrentUser, se
         case "delete":
             for row in rows:
                 photo_names.extend(delete_owned_recommendation(session, row))
+            if category not in PLACE_CATEGORIES:
+                session.delete(owned_custom_category(session, user, category))
         case _ as unreachable:
             assert_never(unreachable)
     changed = len(rows)
@@ -946,6 +1055,37 @@ async def add_recommendation_photo(
     return recommendation_outs(session, user.id, [row])[0]
 
 
+@router.put("/recommendations/{recommendation_id}/photos/{photo_id}")
+async def replace_recommendation_photo(
+    recommendation_id: int,
+    photo_id: int,
+    user: CurrentUser,
+    session: DbSession,
+    file: Annotated[UploadFile, File()],
+) -> RecommendationOut:
+    row = visible_recommendation(session, recommendation_id, user)
+    if row.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Фото меняет автор")
+    photo = session.get(RecommendationPhoto, photo_id)
+    if photo is None or photo.recommendation_id != row.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Фото нет")
+    if Path(file.filename or "").suffix.lower() not in PHOTO_SUFFIXES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Нужна фотография JPEG, PNG или WebP")
+    data = await file.read(MAX_BYTES + 1)
+    await file.close()
+    try:
+        extension = inspect_image(data)
+    except ImageRejected as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    name = f"{secrets.token_hex(16)}.{extension}"
+    (photo_dir() / name).write_bytes(data)
+    previous = photo.stored_name
+    photo.stored_name = name
+    session.commit()
+    remove_photo_file(previous)
+    return recommendation_outs(session, user.id, [row])[0]
+
+
 @router.get("/recommendations/{recommendation_id}/photos/{photo_id}")
 def recommendation_photo(
     recommendation_id: int, photo_id: int, user: CurrentUser, session: DbSession
@@ -955,7 +1095,7 @@ def recommendation_photo(
     if photo is None or photo.recommendation_id != recommendation_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Фото нет")
     path = stored_photo(photo.stored_name)
-    return FileResponse(path, media_type=avatar_media_type(path))
+    return FileResponse(path, media_type=avatar_media_type(path), headers={"Cache-Control": "no-store"})
 
 
 def audience_friends(session: Session, user: User, usernames: list[str]) -> list[User]:
@@ -995,7 +1135,7 @@ def create_recommendation(body: RecommendationIn, user: CurrentUser, session: Db
         place_id=place.id,
         text=body.text,
         visibility=body.visibility,
-        category=body.category,
+        category=assignable_category(session, user, body.category),
         status="draft" if body.draft else "published",
         publish_at=None if body.draft else body.publish_at,
     )

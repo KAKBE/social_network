@@ -21,6 +21,11 @@ const chip = ref("all");
 const showMap = ref(false);
 const categoryVisibility = ref("friends");
 const categoryBusy = ref(false);
+const customCategories = ref([]);
+const addingCategory = ref(false);
+const categoryName = ref("");
+const renamingCategory = ref(false);
+const categoryDraft = ref("");
 const editing = ref(false);
 const showAllFriends = ref(false);
 const busy = ref(false);
@@ -41,8 +46,20 @@ const shownFriends = computed(() => {
   const friends = page.value?.friends ?? [];
   return showAllFriends.value ? friends : friends.slice(0, 6);
 });
-const usedCategories = computed(() =>
-  PLACE_CATEGORIES.filter((item) => posts.value.some((post) => post.category === item.id && post.status !== "draft")),
+const usedCategories = computed(() => {
+  const builtins = PLACE_CATEGORIES.filter((item) =>
+    posts.value.some((post) => post.category === item.id && post.status !== "draft"),
+  );
+  const known = new Set(PLACE_CATEGORIES.map((item) => item.id));
+  const fromPosts = posts.value
+    .filter((post) => post.category && !known.has(post.category) && post.status !== "draft")
+    .map((post) => post.category);
+  const own = page.value?.is_self ? customCategories.value.map((item) => item.title) : [];
+  const custom = [...new Set([...own, ...fromPosts])].map((title) => ({ id: title, label: title }));
+  return [...builtins, ...custom];
+});
+const isCustom = computed(
+  () => page.value?.is_self && customCategories.value.some((item) => item.title === chip.value),
 );
 const hasDrafts = computed(() => posts.value.some((post) => post.status === "draft"));
 const publishedCount = computed(() => posts.value.filter((post) => post.status !== "draft").length);
@@ -102,12 +119,14 @@ async function load() {
     }
     nextFace = URL.createObjectURL(blob);
   }
+  const nextCategories = profile.is_self ? await api.myCategories() : [];
   if (stale()) {
     if (nextFace) URL.revokeObjectURL(nextFace);
     return;
   }
   page.value = profile;
   posts.value = recommendations;
+  customCategories.value = nextCategories;
   displayName.value = profile.display_name;
   surname.value = profile.surname;
   username.value = profile.username;
@@ -125,6 +144,7 @@ watch(canMap, (allowed) => {
 
 watch(posts, () => {
   if (chip.value === "all" || chip.value === "drafts") return;
+  if (customCategories.value.some((item) => item.title === chip.value)) return;
   const stillPublished = posts.value.some((post) => post.category === chip.value && post.status !== "draft");
   if (!stillPublished) chip.value = "all";
 });
@@ -161,6 +181,67 @@ function chooseCategory(next) {
   const values = new Set(rows.map((post) => post.visibility));
   const only = values.size === 1 ? [...values][0] : "";
   categoryVisibility.value = ["self", "friends", "close", "everyone"].includes(only) ? only : "friends";
+}
+
+async function createCategory() {
+  const title = categoryName.value.trim();
+  if (!title) return;
+  error.value = "";
+  categoryBusy.value = true;
+  try {
+    const created = await api.createCategory(title);
+    categoryName.value = "";
+    addingCategory.value = false;
+    customCategories.value = [...customCategories.value, created];
+    chooseCategory(created.title);
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    categoryBusy.value = false;
+  }
+}
+
+function startCategoryRename() {
+  renamingCategory.value = true;
+  categoryDraft.value = chip.value;
+}
+
+async function saveCategoryRename() {
+  const title = categoryDraft.value.trim();
+  if (!title || title === chip.value) {
+    renamingCategory.value = false;
+    return;
+  }
+  error.value = "";
+  categoryBusy.value = true;
+  const previous = chip.value;
+  try {
+    const renamed = await api.renameCategory(previous, title);
+    renamingCategory.value = false;
+    chip.value = renamed.title;
+    await load();
+    emit("managed");
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    categoryBusy.value = false;
+  }
+}
+
+async function removeCustomCategory() {
+  if (!window.confirm(`Удалить категорию «${chip.value}»? Посты останутся без категории.`)) return;
+  error.value = "";
+  categoryBusy.value = true;
+  try {
+    await api.deleteCategory(chip.value);
+    chip.value = "all";
+    await load();
+    emit("managed");
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    categoryBusy.value = false;
+  }
 }
 
 async function runCategory(body, confirmText) {
@@ -339,38 +420,69 @@ async function toggleClose() {
         <button v-if="hasDrafts" type="button" class="chip" :class="{ active: chip === 'drafts' }" @click="chip = 'drafts'">
           Черновики
         </button>
+        <button v-if="page.is_self" type="button" class="chip" :class="{ active: addingCategory }" @click="addingCategory = !addingCategory">
+          Новая
+        </button>
       </div>
-      <section v-if="page.is_self && categoryPosts.length" class="category-tools">
+      <form v-if="page.is_self && addingCategory" class="search category-create" @submit.prevent="createCategory">
+        <input v-model="categoryName" maxlength="24" placeholder="Например, кофе" aria-label="Название категории" />
+        <button class="primary" :disabled="categoryBusy">Добавить</button>
+      </form>
+      <section v-if="page.is_self && (categoryPosts.length || isCustom)" class="category-tools">
+        <div class="list-head">
+          <h3 v-if="!renamingCategory">{{ categoryLabel(chip) }}</h3>
+          <form v-else class="search rename" @submit.prevent="saveCategoryRename">
+            <input v-model="categoryDraft" maxlength="24" aria-label="Новое название категории" />
+            <button type="submit" :disabled="categoryBusy">Сохранить</button>
+            <button type="button" class="link" @click="renamingCategory = false">Отмена</button>
+          </form>
+          <span class="count-pill">{{ categoryPosts.length }}</span>
+        </div>
         <p class="muted">
-          {{ categoryLabel(chip) }} · {{ categoryPosts.length }}
-          <template v-if="categoryDraftCount">, из них черновиков {{ categoryDraftCount }}</template>
-          <template v-if="categoryHidden"> · скрыто, видите только вы</template>
+          <template v-if="categoryDraftCount">Черновиков {{ categoryDraftCount }}. </template>
+          <template v-if="categoryHidden">Скрыто, видите только вы. </template>
+          <template v-if="isCustom && !categoryPosts.length">Поставьте категорию при публикации или правке поста.</template>
+          <template v-else-if="isCustom">Категория останется на странице, пока вы её не удалите.</template>
+          <template v-else>Если постов не останется, категория пропадёт. Её снова можно поставить при правке поста.</template>
         </p>
-        <p class="muted">Если постов в категории не останется, она пропадёт. Её снова можно поставить при правке поста.</p>
-        <label>
-          Кто видит
-          <select v-model="categoryVisibility">
-            <option value="self">Только я</option>
-            <option value="friends">Друзья</option>
-            <option value="close">Близкие друзья</option>
-            <option value="everyone">Все</option>
-          </select>
-        </label>
+        <div v-if="categoryPosts.length" class="segment" role="group" aria-label="Кто видит">
+          <button type="button" :class="{ active: categoryVisibility === 'self' }" @click="categoryVisibility = 'self'">Только я</button>
+          <button type="button" :class="{ active: categoryVisibility === 'friends' }" @click="categoryVisibility = 'friends'">Друзья</button>
+          <button type="button" :class="{ active: categoryVisibility === 'close' }" @click="categoryVisibility = 'close'">Близкие</button>
+          <button type="button" :class="{ active: categoryVisibility === 'everyone' }" @click="categoryVisibility = 'everyone'">Все</button>
+        </div>
         <div class="actions">
-          <button type="button" :disabled="categoryBusy" @click="runCategory({ action: 'visibility', visibility: categoryVisibility })">
+          <button
+            v-if="categoryPosts.length"
+            type="button"
+            class="primary"
+            :disabled="categoryBusy"
+            @click="runCategory({ action: 'visibility', visibility: categoryVisibility })"
+          >
             Применить ко всем
           </button>
-          <button type="button" :disabled="categoryBusy || categoryHidden" @click="runCategory({ action: 'visibility', visibility: 'self' })">
+          <button
+            v-if="categoryPosts.length"
+            type="button"
+            :disabled="categoryBusy || categoryHidden"
+            @click="runCategory({ action: 'visibility', visibility: 'self' })"
+          >
             Скрыть
           </button>
+          <button v-if="isCustom && !renamingCategory" type="button" :disabled="categoryBusy" @click="startCategoryRename">
+            Переименовать
+          </button>
           <button
+            v-if="!isCustom && categoryPosts.length"
             type="button"
             :disabled="categoryBusy"
             @click="runCategory({ action: 'clear' }, `Убрать категорию «${categoryLabel(chip)}»? Посты останутся без категории.`)"
           >
             Убрать категорию
           </button>
+          <button v-if="isCustom" type="button" :disabled="categoryBusy" @click="removeCustomCategory">Удалить категорию</button>
           <button
+            v-if="categoryPosts.length"
             type="button"
             class="danger"
             :disabled="categoryBusy"

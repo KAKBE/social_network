@@ -7,6 +7,21 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.security import LOGIN_PATTERN, password_is_strong
 
 PLACE_CATEGORIES = ("study", "food", "walk", "meet")
+PLACE_CATEGORY_LABELS = {"study": "Учёба", "food": "Еда", "walk": "Прогулка", "meet": "Встреча"}
+CATEGORY_TITLE_MAX = 24
+
+
+def normalize_category_title(value: str) -> str:
+    value = " ".join(value.split())
+    if not value:
+        raise ValueError("Заполните поле")
+    if (
+        len(value) > CATEGORY_TITLE_MAX
+        or any(char in "<>/" for char in value)
+        or value.casefold() in {"all", "drafts"}
+    ):
+        raise ValueError("Некорректное название категории")
+    return value
 
 
 class LoginIn(BaseModel):
@@ -226,7 +241,7 @@ class RecommendationIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     point_corrected: bool = False
     visibility: Literal["friends", "close", "allow", "deny", "everyone", "self"] = "friends"
-    category: Literal["study", "food", "walk", "meet"] | None = None
+    category: str | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
     draft: bool = False
 
@@ -235,7 +250,7 @@ class RecommendationIn(BaseModel):
     def blank_category(cls, value: str | None) -> str | None:
         if value is None or value == "":
             return None
-        return value
+        return normalize_category_title(value)
     publish_at: datetime | None = None
     list_id: int | None = None
     city: str = Field(default="", max_length=120)
@@ -261,7 +276,7 @@ class RecommendationUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2000)
     visibility: Literal["friends", "close", "allow", "deny", "everyone", "self"] = "friends"
-    category: Literal["study", "food", "walk", "meet"] | None = None
+    category: str | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("category", mode="before")
@@ -269,7 +284,7 @@ class RecommendationUpdate(BaseModel):
     def blank_category(cls, value: str | None) -> str | None:
         if value is None or value == "":
             return None
-        return value
+        return normalize_category_title(value)
 
     @field_validator("name", "text")
     @classmethod
@@ -286,6 +301,22 @@ class RecommendationUpdate(BaseModel):
             if not LOGIN_PATTERN.fullmatch(name):
                 raise ValueError("Некорректное имя пользователя")
         return value
+
+
+class CategoryTitleIn(BaseModel):
+    title: str
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def plain_title(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Некорректное название категории")
+        return normalize_category_title(value)
+
+
+class CategoryOut(BaseModel):
+    id: int
+    title: str
 
 
 class CategoryManageIn(BaseModel):

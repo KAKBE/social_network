@@ -1,8 +1,8 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import L from "leaflet";
 import { api } from "../api.js";
-import { PLACE_CATEGORIES } from "../categories.js";
+import { categoryChoices } from "../categories.js";
 
 const props = defineProps({
   config: { type: Object, required: true },
@@ -29,6 +29,8 @@ const visibility = ref("friends");
 const category = ref("");
 const audience = ref([]);
 const files = ref([]);
+const extraCategories = ref([]);
+const choices = computed(() => categoryChoices(extraCategories.value));
 const listId = ref("");
 const draft = ref(false);
 const publishAt = ref("");
@@ -148,6 +150,11 @@ async function publish() {
 
 async function loadFriends() {
   friends.value = await api.friends();
+  try {
+    extraCategories.value = await api.myCategories();
+  } catch {
+    extraCategories.value = [];
+  }
 }
 
 watch(
@@ -174,7 +181,13 @@ onBeforeUnmount(() => map?.remove());
 
 watch(
   () => props.active,
-  (active) => active && map && setTimeout(() => map.invalidateSize(), 0),
+  (active) => {
+    if (!active) return;
+    if (map) setTimeout(() => map.invalidateSize(), 0);
+    api.myCategories().then((rows) => {
+      extraCategories.value = rows;
+    }).catch(() => {});
+  },
 );
 </script>
 
@@ -206,7 +219,7 @@ watch(
         Категория
         <select v-model="category">
           <option value="">Без категории</option>
-          <option v-for="item in PLACE_CATEGORIES" :key="item.id" :value="item.id">{{ item.label }}</option>
+          <option v-for="item in choices" :key="item.id" :value="item.id">{{ item.label }}</option>
         </select>
       </label>
       <label>

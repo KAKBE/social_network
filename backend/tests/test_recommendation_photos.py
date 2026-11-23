@@ -1,10 +1,14 @@
 """Recommendation photos: at most five checked images, visible only with the recommendation."""
 
 import base64
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
+from app.db import SessionLocal
 from app.main import app
+from app.models import RecommendationPhoto
 from app.seed import DEMO_PASSWORD, reset_and_seed
 
 PNG_1X1 = base64.b64decode(
@@ -66,9 +70,24 @@ def test_recommendation_photos_are_checked_and_private() -> None:
     assert extra.status_code == 422
 
     photo_id = uploaded.json()["photos"][0]["id"]
+    with SessionLocal() as session:
+        previous_name = session.get(RecommendationPhoto, photo_id).stored_name
+    previous_path = Path(settings.upload_dir, "recommendations", previous_name)
+    assert previous_path.is_file()
+    replaced_bytes = PNG_1X1[:-1] + bytes([PNG_1X1[-1] ^ 0x01])
+    replaced = client.put(
+        f"/api/recommendations/{rec_id}/photos/{photo_id}",
+        headers=lesha,
+        files={"file": ("next.png", replaced_bytes, "image/png")},
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert len(replaced.json()["photos"]) == 5
+    assert photo_id in {item["id"] for item in replaced.json()["photos"]}
+    assert not previous_path.is_file()
     own = client.get(f"/api/recommendations/{rec_id}/photos/{photo_id}", headers=lesha)
     assert own.status_code == 200
-    assert own.content == PNG_1X1
+    assert own.headers["cache-control"] == "no-store"
+    assert own.content == replaced_bytes
     assert client.post(
         f"/api/recommendations/{rec_id}/photos",
         headers=anya,
@@ -78,7 +97,14 @@ def test_recommendation_photos_are_checked_and_private() -> None:
     assert client.get(f"/api/recommendations/{rec_id}/photos/{photo_id}", headers=stranger).status_code == 404
 
     client.put("/api/friends/anya/close", json={"close": True}, headers=lesha)
-    assert client.get(f"/api/recommendations/{rec_id}/photos/{photo_id}", headers=anya).content == PNG_1X1
+    assert client.get(f"/api/recommendations/{rec_id}/photos/{photo_id}", headers=anya).content == replaced_bytes
+    forbidden = client.put(
+        f"/api/recommendations/{rec_id}/photos/{photo_id}",
+        headers=anya,
+        files={"file": ("next.png", PNG_1X1, "image/png")},
+    )
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"] == "Фото меняет автор"
     assert client.post(
         f"/api/recommendations/{rec_id}/photos",
         headers=anya,
