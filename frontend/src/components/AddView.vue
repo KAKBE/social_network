@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import L from "leaflet";
 import { api } from "../api.js";
+import { PLACE_CATEGORIES } from "../categories.js";
 
 const props = defineProps({
   config: { type: Object, required: true },
@@ -24,6 +25,7 @@ const error = ref("");
 const saving = ref(false);
 const friends = ref([]);
 const visibility = ref("friends");
+const category = ref("");
 const audience = ref([]);
 const files = ref([]);
 const lists = ref([]);
@@ -116,6 +118,7 @@ async function publish() {
       point_corrected: pointCorrected.value,
       city: city.value,
       visibility: visibility.value,
+      category: category.value,
       audience: visibility.value === "allow" || visibility.value === "deny" ? audience.value : [],
       draft: draft.value,
       publish_at: !draft.value && publishAt.value ? new Date(publishAt.value).toISOString() : null,
@@ -124,6 +127,7 @@ async function publish() {
     for (const file of files.value) rec = await api.uploadRecommendationPhoto(rec.id, file);
     query.value = address.value = city.value = name.value = text.value = "";
     visibility.value = "friends";
+    category.value = "";
     audience.value = [];
     files.value = [];
     draft.value = false;
@@ -191,6 +195,13 @@ watch(
       <label>
         Рекомендация
         <textarea v-model="text" rows="4" maxlength="2000" required placeholder="Чем место хорошо? Можно описать готовый план встречи."></textarea>
+      </label>
+      <label>
+        Категория
+        <select v-model="category">
+          <option value="">Без категории</option>
+          <option v-for="item in PLACE_CATEGORIES" :key="item.id" :value="item.id">{{ item.label }}</option>
+        </select>
       </label>
       <label>
         Кто видит

@@ -35,6 +35,7 @@ from app.models import (
     utcnow,
 )
 from app.schemas import (
+    PLACE_CATEGORIES,
     AddPlaceIn,
     ClientConfigOut,
     CloseFriendIn,
@@ -51,6 +52,7 @@ from app.schemas import (
     PasswordChangeIn,
     PerfSampleIn,
     ProfileOut,
+    ProfilePerson,
     ProfileUpdate,
     RegisterIn,
     PlaceListIn,
@@ -139,6 +141,7 @@ def to_me(user: User) -> MeOut:
         login=user.login,
         username=user.username,
         display_name=user.display_name,
+        surname=user.surname or "",
         bio=user.bio,
         profile_visibility=user.profile_visibility,
         theme=user.theme,
@@ -154,13 +157,47 @@ def profile_visible(session: Session, viewer: User, owner: User) -> bool:
     return False
 
 
-def to_profile(owner: User, visible: bool) -> ProfileOut:
+def friend_id_set(session: Session, user_id: int) -> set[int]:
+    return set(session.scalars(select(Friendship.friend_id).where(Friendship.user_id == user_id)))
+
+
+def profile_people(session: Session, viewer: User, user_ids: set[int]) -> list[ProfilePerson]:
+    if not user_ids:
+        return []
+    rows = session.scalars(
+        select(User).where(User.id.in_(user_ids)).order_by(User.display_name, User.id).limit(50)
+    ).all()
+    return [
+        ProfilePerson(
+            public_id=row.public_id,
+            username=row.username,
+            display_name=row.display_name,
+            has_avatar=row.avatar_path is not None and profile_visible(session, viewer, row),
+        )
+        for row in rows
+    ]
+
+
+def to_profile(session: Session, viewer: User, owner: User) -> ProfileOut:
+    visible = profile_visible(session, viewer, owner)
+    is_self = viewer.id == owner.id
+    sees_friends = is_self or session.get(Friendship, (viewer.id, owner.id)) is not None
+    owner_friends = friend_id_set(session, owner.id) if sees_friends else set()
+    mutual_ids = owner_friends & friend_id_set(session, viewer.id) if sees_friends and not is_self else set()
     return ProfileOut(
         public_id=owner.public_id,
         username=owner.username,
         display_name=owner.display_name,
+        surname=owner.surname or "",
         bio=owner.bio if visible else "",
         has_avatar=visible and owner.avatar_path is not None,
+        is_self=is_self,
+        relation="self" if is_self else relation_of(session, viewer, owner),
+        is_close=session.get(CloseFriend, (viewer.id, owner.id)) is not None,
+        friend_count=len(owner_friends) if sees_friends else None,
+        mutual_count=len(mutual_ids) if sees_friends and not is_self else None,
+        friends=profile_people(session, viewer, owner_friends),
+        mutual=profile_people(session, viewer, mutual_ids),
     )
 
 
@@ -265,6 +302,7 @@ def to_recommendation_out(
         liked=liked,
         like_count=like_count,
         status=rec.status,
+        category=rec.category or "",
         photos=photos,
         audience=audience,
     )
@@ -534,7 +572,32 @@ def user_profile(public_id: uuid.UUID, viewer: CurrentUser, session: DbSession) 
     owner = session.scalar(select(User).where(User.public_id == public_id))
     if owner is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    return to_profile(owner, profile_visible(session, viewer, owner))
+    return to_profile(session, viewer, owner)
+
+
+@router.get("/users/{public_id}/recommendations")
+def user_recommendations(
+    public_id: uuid.UUID,
+    viewer: CurrentUser,
+    session: DbSession,
+    category: Annotated[str | None, Query()] = None,
+) -> list[RecommendationOut]:
+    if category is not None and category not in PLACE_CATEGORIES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Неизвестная категория")
+    owner = session.scalar(select(User).where(User.public_id == public_id))
+    if owner is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    rows = session.scalars(
+        select(Recommendation)
+        .options(joinedload(Recommendation.author), joinedload(Recommendation.place))
+        .where(
+            Recommendation.author_id == owner.id,
+            recommendation_visible_to(viewer.id),
+            *([Recommendation.category == category] if category is not None else []),
+        )
+        .order_by(Recommendation.created_at.desc(), Recommendation.id.desc())
+    ).unique().all()
+    return recommendation_outs(session, viewer.id, list(rows))
 
 
 @router.get("/users/{public_id}/avatar")
@@ -669,6 +732,7 @@ def update_recommendation(
     row.text = body.text
     row.place.name = body.name
     row.visibility = body.visibility
+    row.category = body.category
     session.execute(delete(RecommendationAudience).where(RecommendationAudience.recommendation_id == row.id))
     session.flush()
     for friend in selected:
@@ -838,6 +902,7 @@ def create_recommendation(body: RecommendationIn, user: CurrentUser, session: Db
         place_id=place.id,
         text=body.text,
         visibility=body.visibility,
+        category=body.category,
         status="draft" if body.draft else "published",
         publish_at=None if body.draft else body.publish_at,
     )

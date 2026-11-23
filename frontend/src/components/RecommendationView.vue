@@ -1,15 +1,15 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from "vue";
 import { api } from "../api.js";
+import { PLACE_CATEGORIES } from "../categories.js";
 
 const props = defineProps({
   item: { type: Object, required: true },
   lists: { type: Array, required: true },
 });
-const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted"]);
+const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted", "open-author"]);
 
 const current = ref(props.item);
-const profile = ref(null);
 const error = ref("");
 const photoUrls = ref([]);
 const editing = ref(false);
@@ -18,6 +18,7 @@ const friends = ref([]);
 const name = ref("");
 const text = ref("");
 const visibility = ref("friends");
+const category = ref("");
 const audience = ref([]);
 
 function revokePhotos() {
@@ -49,7 +50,6 @@ onBeforeUnmount(revokePhotos);
 
 async function openPage(item) {
   current.value = item;
-  profile.value = null;
   error.value = "";
   try {
     current.value = await api.recommendation(item.id);
@@ -105,6 +105,7 @@ async function startEdit() {
   name.value = current.value.place.name;
   text.value = current.value.text;
   visibility.value = current.value.visibility;
+  category.value = current.value.category || "";
   audience.value = [...(current.value.audience ?? [])];
   editing.value = true;
   try {
@@ -122,6 +123,7 @@ async function saveEdit() {
       name: name.value.trim(),
       text: text.value.trim(),
       visibility: visibility.value,
+      category: category.value,
       audience: visibility.value === "allow" || visibility.value === "deny" ? audience.value : [],
     });
     editing.value = false;
@@ -146,14 +148,6 @@ async function remove() {
   }
 }
 
-async function openAuthor() {
-  error.value = "";
-  try {
-    profile.value = await api.profile(current.value.author.public_id);
-  } catch (err) {
-    error.value = err.message;
-  }
-}
 </script>
 
 <template>
@@ -162,6 +156,13 @@ async function openAuthor() {
     <form v-if="editing" class="stack" @submit.prevent="saveEdit">
       <label>Название <input v-model="name" maxlength="200" required /></label>
       <label>Рекомендация <textarea v-model="text" rows="4" maxlength="2000" required /></label>
+      <label>
+        Категория
+        <select v-model="category">
+          <option value="">Без категории</option>
+          <option v-for="item in PLACE_CATEGORIES" :key="item.id" :value="item.id">{{ item.label }}</option>
+        </select>
+      </label>
       <label>
         Кто видит
         <select v-model="visibility">
@@ -194,7 +195,7 @@ async function openAuthor() {
       <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" @change="addPhoto" />
     </label>
     <p>
-      <button class="link" @click="openAuthor">{{ current.author.display_name }}</button>
+      <button class="link" @click="emit('open-author', current.author.public_id)">{{ current.author.display_name }}</button>
       <span class="muted"> @{{ current.author.username }}</span>
     </p>
     <div class="actions">
@@ -204,12 +205,6 @@ async function openAuthor() {
       <button @click="like">{{ current.liked ? "Убрать лайк" : "Лайк" }} · {{ current.like_count }}</button>
       <button @click="emit('to-list', current.place)">В список</button>
     </div>
-    <article v-if="profile" class="card">
-      <h3>{{ profile.display_name }}</h3>
-      <p class="muted">@{{ profile.username }}</p>
-      <p v-if="profile.bio">{{ profile.bio }}</p>
-      <p v-else class="muted">Описание скрыто или не заполнено.</p>
-    </article>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 </template>

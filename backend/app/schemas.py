@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.security import LOGIN_PATTERN, password_is_strong
 
+PLACE_CATEGORIES = ("study", "food", "walk", "meet")
+
 
 class LoginIn(BaseModel):
     login: str = Field(min_length=1, max_length=50)
@@ -60,9 +62,17 @@ class MeOut(BaseModel):
     login: str
     username: str
     display_name: str
+    surname: str = ""
     bio: str
     profile_visibility: str
     theme: str
+    has_avatar: bool
+
+
+class ProfilePerson(BaseModel):
+    public_id: uuid.UUID
+    username: str
+    display_name: str
     has_avatar: bool
 
 
@@ -70,8 +80,16 @@ class ProfileOut(BaseModel):
     public_id: uuid.UUID
     username: str
     display_name: str
+    surname: str = ""
     bio: str
     has_avatar: bool
+    is_self: bool = False
+    relation: Literal["self", "none", "outgoing", "incoming", "friend"] = "none"
+    is_close: bool = False
+    friend_count: int | None = None
+    mutual_count: int | None = None
+    friends: list[ProfilePerson] = Field(default_factory=list)
+    mutual: list[ProfilePerson] = Field(default_factory=list)
 
 
 class UserSearchOut(BaseModel):
@@ -106,6 +124,7 @@ class FriendRequestOut(BaseModel):
 
 class ProfileUpdate(BaseModel):
     display_name: str | None = None
+    surname: str | None = Field(default=None, max_length=100)
     username: str | None = None
     bio: str | None = Field(default=None, max_length=500)
     profile_visibility: Literal["everyone", "friends"] | None = None
@@ -120,6 +139,16 @@ class ProfileUpdate(BaseModel):
         if not value or any(ord(char) < 32 or char in "<>" for char in value):
             raise ValueError("Недопустимые символы в никнейме")
         return value
+
+    @field_validator("surname")
+    @classmethod
+    def plain_surname(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if any(ord(char) < 32 or char in "<>" for char in value):
+            raise ValueError("Недопустимые символы в фамилии")
+        return value or None
 
     @field_validator("username")
     @classmethod
@@ -183,6 +212,7 @@ class RecommendationOut(BaseModel):
     liked: bool
     like_count: int
     status: str
+    category: str = ""
     photos: list[PhotoOut] = Field(default_factory=list)
     audience: list[str] = Field(default_factory=list)
 
@@ -195,8 +225,16 @@ class RecommendationIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     point_corrected: bool = False
     visibility: Literal["friends", "close", "allow", "deny"] = "friends"
+    category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
     draft: bool = False
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def blank_category(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        return value
     publish_at: datetime | None = None
     list_id: int | None = None
     city: str = Field(default="", max_length=120)
@@ -222,7 +260,15 @@ class RecommendationUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2000)
     visibility: Literal["friends", "close", "allow", "deny"] = "friends"
+    category: Literal["study", "food", "walk", "meet"] | None = None
     audience: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def blank_category(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        return value
 
     @field_validator("name", "text")
     @classmethod

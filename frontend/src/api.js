@@ -92,6 +92,13 @@ export const api = {
   avatarBlob: () => requestBlob("/api/me/avatar"),
   searchUsers: (q) => request("GET", `/api/users/search?q=${encodeURIComponent(q)}`),
   profile: (publicId) => request("GET", `/api/users/${publicId}`),
+  profileRecommendations: (publicId, category = "") => {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    const query = params.toString();
+    return request("GET", `/api/users/${publicId}/recommendations${query ? `?${query}` : ""}`);
+  },
+  userAvatar: (publicId) => requestBlob(`/api/users/${publicId}/avatar`),
   friendRequests: () => request("GET", "/api/friend-requests"),
   sendFriendRequest: (username) => request("POST", "/api/friend-requests", { username }),
   acceptFriendRequest: (id) => request("POST", `/api/friend-requests/${id}/accept`),

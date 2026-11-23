@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { api } from "../api.js";
+import { categoryLabel } from "../categories.js";
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -8,7 +9,7 @@ const props = defineProps({
   showMapButton: { type: Boolean, default: false },
   closable: { type: Boolean, default: false },
 });
-const emit = defineEmits(["show-on-map", "close", "open", "to-list"]);
+const emit = defineEmits(["show-on-map", "close", "open", "to-list", "open-author"]);
 
 const savedIn = computed(() =>
   props.lists.filter((l) => l.places.some((p) => p.id === props.item.place.id)).map((l) => l.title),
@@ -50,7 +51,12 @@ onBeforeUnmount(releasePhoto);
       <div>
         <h3>{{ item.place.name }}</h3>
         <p class="muted">
-          {{ item.is_own ? "Ваша рекомендация" : `Рекомендует ${item.author.display_name}` }} · {{ date }}
+          <template v-if="item.is_own">Ваша рекомендация</template>
+          <button v-else class="link small" @click="emit('open-author', item.author.public_id)">
+            {{ item.author.display_name }}
+          </button>
+          · {{ date }}
+          <template v-if="categoryLabel(item.category)"> · {{ categoryLabel(item.category) }}</template>
         </p>
       </div>
       <button v-if="closable" class="icon" aria-label="Закрыть" @click="emit('close')">✕</button>

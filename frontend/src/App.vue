@@ -10,6 +10,7 @@ import ListsView from "./components/ListsView.vue";
 import SettingsView from "./components/SettingsView.vue";
 import SearchView from "./components/SearchView.vue";
 import RecommendationView from "./components/RecommendationView.vue";
+import ProfileView from "./components/ProfileView.vue";
 import PerfPanel from "./components/PerfPanel.vue";
 
 const TABS = [
@@ -32,6 +33,10 @@ const authorFilter = ref("");
 const friendOptions = ref([]);
 const lists = ref([]);
 const tab = ref("map");
+const profileId = ref("");
+const profileReturn = ref("feed");
+const profileStack = ref([]);
+const openedFrom = ref("feed");
 const selected = ref(null);
 const opened = ref(null);
 const pendingPlace = ref(null);
@@ -64,6 +69,8 @@ function logout() {
   selected.value = null;
   opened.value = null;
   pendingPlace.value = null;
+  profileId.value = "";
+  profileStack.value = [];
   tab.value = "map";
   lastPerf.value = null;
   notes.value = [];
@@ -188,9 +195,43 @@ async function createList(title) {
   }
 }
 
+function openProfile(publicId) {
+  const insideProfile =
+    tab.value === "profile" ||
+    (tab.value === "recommendation" && openedFrom.value === "profile") ||
+    (tab.value === "settings" && profileId.value);
+  if (profileId.value === publicId) {
+    tab.value = "profile";
+    return;
+  }
+  if (insideProfile && profileId.value) {
+    profileStack.value = [...profileStack.value, profileId.value];
+  } else {
+    profileReturn.value = tab.value;
+    profileStack.value = [];
+  }
+  profileId.value = publicId;
+  tab.value = "profile";
+}
+
+function closeProfile() {
+  const previous = profileStack.value.at(-1);
+  if (previous) {
+    profileStack.value = profileStack.value.slice(0, -1);
+    profileId.value = previous;
+    return;
+  }
+  tab.value = profileReturn.value || "feed";
+}
+
 function openRecommendation(item) {
+  openedFrom.value = tab.value === "profile" ? "profile" : tab.value;
   opened.value = item;
   tab.value = "recommendation";
+}
+
+function closeRecommendation() {
+  tab.value = openedFrom.value || "feed";
 }
 
 function onSeen(id) {
@@ -294,7 +335,7 @@ onUnmounted(() => clearInterval(poll));
       </button>
       <span class="topbar-actions">
         <button class="link small" @click="tab = 'search'">Поиск</button>
-        <button class="link small" @click="tab = 'settings'">{{ user.display_name }}</button>
+        <button class="link small" @click="openProfile(user.public_id)">{{ user.display_name }}</button>
         <button class="link small" @click="logout">выйти</button>
       </span>
     </header>
@@ -318,6 +359,7 @@ onUnmounted(() => clearInterval(poll));
             closable
             @to-list="openListPicker"
             @open="openRecommendation(selected)"
+            @open-author="openProfile"
             @close="selected = null"
           />
         </div>
@@ -354,20 +396,37 @@ onUnmounted(() => clearInterval(poll));
           show-map-button
           @to-list="openListPicker"
           @open="openRecommendation(item)"
+          @open-author="openProfile"
           @show-on-map="showOnMap($event.place)"
         />
       </section>
 
       <AddView v-show="tab === 'add'" :config="config" :active="tab === 'add'" @created="onCreated" />
 
-      <SearchView v-show="tab === 'search'" />
+      <SearchView v-show="tab === 'search'" @open-profile="openProfile" />
+      <ProfileView
+        v-if="profileId"
+        v-show="tab === 'profile'"
+        :public-id="profileId"
+        :active="tab === 'profile'"
+        :lists="lists"
+        @back="closeProfile"
+        @open="openRecommendation"
+        @open-profile="openProfile"
+        @to-list="openListPicker"
+        @settings="tab = 'settings'"
+        @saved="onProfileSaved"
+        @add="tab = 'add'"
+        @show-on-map="showOnMap($event.place)"
+      />
       <RecommendationView
         v-if="opened"
         :key="opened.id"
         v-show="tab === 'recommendation'"
         :item="opened"
         :lists="lists"
-        @back="tab = 'feed'"
+        @back="closeRecommendation"
+        @open-author="openProfile"
         @liked="onLiked"
         @deleted="onDeleted"
         @seen="onSeen"

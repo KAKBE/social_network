@@ -379,6 +379,128 @@ button.note {
   object-fit: cover;
 }
 
+.profile-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.profile-id h2 {
+  margin: 0;
+}
+
+.profile-tag {
+  margin: 2px 0 8px;
+  color: var(--muted);
+}
+
+.profile-bio {
+  margin: 0 0 10px;
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.profile-actions button:not(.link) {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+.profile-stats {
+  display: flex;
+  gap: 16px;
+  color: var(--muted);
+}
+
+.face-button {
+  position: relative;
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.profile-avatar,
+.avatar-letter {
+  width: 96px;
+  height: 96px;
+}
+
+.avatar-letter {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 32px;
+}
+
+.avatar.mini,
+.avatar-letter.mini {
+  width: 48px;
+  height: 48px;
+  font-size: 16px;
+}
+
+.friend-rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+button.friend-chip {
+  width: 76px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+button.friend-chip span:last-child {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 8px 0 12px;
+}
+
+button.chip {
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+button.chip.active {
+  border-color: var(--accent);
+}
+
+.file-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 .toast {
   position: fixed;
   left: 50%;
