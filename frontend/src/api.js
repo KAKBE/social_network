@@ -1,4 +1,5 @@
-const TOKEN_KEY = "posledu.token";
+import { ref } from "vue";
+import { readStoredToken, writeStoredToken } from "./session.js";
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -7,13 +8,22 @@ export class ApiError extends Error {
   }
 }
 
+const storage = globalThis.localStorage ?? {
+  getItem: () => null,
+  setItem() {},
+  removeItem() {},
+};
+
+export const sessionToken = ref(readStoredToken(storage));
+
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionToken.value;
 }
 
 export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  const next = token || "";
+  sessionToken.value = next;
+  writeStoredToken(storage, next);
 }
 
 function messageFrom(data, status) {
