@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, ApiError, getToken, setToken } from "./api.js";
+import { friendRecommendations } from "./feedList.js";
 import { getSeries, measureFirstRender } from "./perf.js";
 import LoginView from "./components/LoginView.vue";
 import MapView from "./components/MapView.vue";
@@ -26,10 +27,13 @@ const measureThisLoad = Boolean(getToken());
 const user = ref(null);
 const config = ref(null);
 const feed = ref([]);
-const unseen = ref([]);
-const unseenReady = ref(false);
 const cityFilter = ref("");
 const authorFilter = ref("");
+const appliedCity = ref("");
+const appliedAuthor = ref("");
+const shownFeed = computed(() =>
+  friendRecommendations(feed.value, { city: appliedCity.value, author: appliedAuthor.value }),
+);
 const friendOptions = ref([]);
 const lists = ref([]);
 const tab = ref("map");
@@ -60,12 +64,12 @@ function logout() {
   setToken(null);
   user.value = null;
   feed.value = [];
-  unseen.value = [];
-  unseenReady.value = false;
   lists.value = [];
   friendOptions.value = [];
   cityFilter.value = "";
   authorFilter.value = "";
+  appliedCity.value = "";
+  appliedAuthor.value = "";
   selected.value = null;
   opened.value = null;
   pendingPlace.value = null;
@@ -120,7 +124,7 @@ async function load() {
     feed.value = feedResponse.data;
     lists.value = myLists;
     await refreshNotes();
-    if (tab.value === "feed") await ensureUnseen();
+    if (tab.value === "feed") await loadFriendOptions();
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) logout();
     else loadError.value = `Не удалось загрузить данные: ${e.message}`;
@@ -255,30 +259,22 @@ function closeRecommendation() {
   tab.value = openedFrom.value || "feed";
 }
 
-function onSeen(id) {
-  unseen.value = unseen.value.filter((row) => row.id !== id);
-}
-
-async function ensureUnseen() {
+async function loadFriendOptions() {
+  if (friendOptions.value.length) return;
   try {
-    const [rows, myFriends] = await Promise.all([
-      api.unseenFeed({ city: cityFilter.value.trim(), author: authorFilter.value }),
-      friendOptions.value.length ? Promise.resolve(friendOptions.value) : api.friends(),
-    ]);
-    unseen.value = rows;
-    friendOptions.value = myFriends;
-    unseenReady.value = true;
+    friendOptions.value = await api.friends();
   } catch (e) {
     flash(e.message);
   }
 }
 
 watch(tab, (value) => {
-  if (value === "feed") ensureUnseen();
+  if (value === "feed") loadFriendOptions();
 });
 
-async function applyFeedFilters() {
-  await ensureUnseen();
+function applyFeedFilters() {
+  appliedCity.value = cityFilter.value.trim();
+  appliedAuthor.value = authorFilter.value;
 }
 
 async function refreshFeed() {
@@ -289,7 +285,6 @@ async function refreshFeed() {
     if (selected.value) {
       selected.value = feed.value.find((row) => row.id === selected.value.id) ?? null;
     }
-    if (tab.value === "feed") await ensureUnseen();
   } catch (e) {
     flash(e.message);
   }
@@ -298,7 +293,6 @@ async function refreshFeed() {
 async function onLiked(item) {
   opened.value = item;
   feed.value = feed.value.map((row) => (row.id === item.id ? item : row));
-  unseen.value = unseen.value.map((row) => (row.id === item.id ? item : row));
   if (selected.value?.id === item.id) selected.value = item;
   try {
     lists.value = await api.lists();
@@ -309,7 +303,6 @@ async function onLiked(item) {
 
 async function onDeleted(id) {
   feed.value = feed.value.filter((row) => row.id !== id);
-  unseen.value = unseen.value.filter((row) => row.id !== id);
   if (selected.value?.id === id) selected.value = null;
   if (opened.value?.id === id) opened.value = null;
   tab.value = "feed";
@@ -421,21 +414,23 @@ onUnmounted(() => clearInterval(poll));
           </select>
           <button class="primary">Показать</button>
         </form>
-        <button v-if="unseenReady && !unseen.length" class="link empty-feed" @click="tab = 'add'">
-          Рекомендаций нет, но вы можете добавить свою
-        </button>
-        <RecommendationCard
-          v-for="item in unseen"
-          :key="item.id"
-          :item="item"
-          :lists="lists"
-          show-map-button
-          @to-list="openListPicker"
-          @open="openRecommendation(item)"
-          @edit="openRecommendation(item, true)"
-          @open-author="openProfile"
-          @show-on-map="showOnMap($event.place)"
-        />
+        <template v-if="tab === 'feed'">
+          <button v-if="!shownFeed.length" class="link empty-feed" @click="tab = 'add'">
+            Рекомендаций нет, но вы можете добавить свою
+          </button>
+          <RecommendationCard
+            v-for="item in shownFeed"
+            :key="item.id"
+            :item="item"
+            :lists="lists"
+            show-map-button
+            @to-list="openListPicker"
+            @open="openRecommendation(item)"
+            @edit="openRecommendation(item, true)"
+            @open-author="openProfile"
+            @show-on-map="showOnMap($event.place)"
+          />
+        </template>
       </section>
 
       <AddView v-show="tab === 'add'" :config="config" :lists="lists" :active="tab === 'add'" @created="onCreated" />
@@ -470,7 +465,6 @@ onUnmounted(() => clearInterval(poll));
         @open-author="openProfile"
         @liked="onLiked"
         @deleted="onDeleted"
-        @seen="onSeen"
         @to-list="openListPicker"
       />
       <SettingsView v-show="tab === 'settings'" :user="user" @saved="onProfileSaved" />

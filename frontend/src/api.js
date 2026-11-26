@@ -107,13 +107,7 @@ export const api = {
   notifications: () => request("GET", "/api/notifications"),
   readNotification: (id) => request("POST", `/api/notifications/${id}/read`),
   setCloseFriend: (username, close) => request("PUT", `/api/friends/${encodeURIComponent(username)}/close`, { close }),
-  feedWithTiming: () => send("GET", "/api/feed?limit=100"),
-  unseenFeed: ({ city = "", author = "" } = {}) => {
-    const params = new URLSearchParams({ limit: "100", unseen: "true" });
-    if (city) params.set("city", city);
-    if (author) params.set("author", author);
-    return request("GET", `/api/feed?${params}`);
-  },
+  feedWithTiming: () => send("GET", "/api/feed?limit=200"),
   recommendation: (id) => request("GET", `/api/recommendations/${id}`),
   updateRecommendation: (id, body) => request("PATCH", `/api/recommendations/${id}`, body),
   myCategories: () => request("GET", "/api/me/categories"),

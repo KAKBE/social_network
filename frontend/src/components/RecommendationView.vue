@@ -9,7 +9,7 @@ const props = defineProps({
   lists: { type: Array, required: true },
   editOnOpen: { type: Boolean, default: false },
 });
-const emit = defineEmits(["back", "liked", "seen", "to-list", "deleted", "open-author"]);
+const emit = defineEmits(["back", "liked", "to-list", "deleted", "open-author"]);
 
 const current = ref(props.item);
 const error = ref("");
@@ -77,7 +77,6 @@ async function openPage(item) {
   error.value = "";
   try {
     current.value = await api.recommendation(item.id);
-    emit("seen", item.id);
     if (props.editOnOpen && current.value.is_own) await startEdit();
   } catch (err) {
     error.value = err.message;
