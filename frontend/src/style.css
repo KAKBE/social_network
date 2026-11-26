@@ -272,6 +272,10 @@ button.note {
   inset: 0;
 }
 
+.leaflet-control-attribution {
+  display: none;
+}
+
 .map.embedded {
   position: relative;
   inset: auto;

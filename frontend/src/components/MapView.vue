@@ -52,11 +52,8 @@ function drawMarkers(items) {
 }
 
 onMounted(async () => {
-  map = L.map(container.value, { zoomControl: false }).setView(MOSCOW_CENTER, 11);
-  L.tileLayer(props.config.tile_url, {
-    maxZoom: 19,
-    attribution: props.config.tile_attribution,
-  }).addTo(map);
+  map = L.map(container.value, { zoomControl: false, attributionControl: false }).setView(MOSCOW_CENTER, 11);
+  L.tileLayer(props.config.tile_url, { maxZoom: 19 }).addTo(map);
   markersLayer = L.layerGroup().addTo(map);
   drawMarkers(props.items);
   await afterPaint();

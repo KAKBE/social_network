@@ -166,8 +166,8 @@ watch(
 
 onMounted(() => {
   loadFriends().catch(() => {});
-  map = L.map(container.value, { zoomControl: false }).setView([55.751, 37.618], 11);
-  L.tileLayer(props.config.tile_url, { maxZoom: 19, attribution: props.config.tile_attribution }).addTo(map);
+  map = L.map(container.value, { zoomControl: false, attributionControl: false }).setView([55.751, 37.618], 11);
+  L.tileLayer(props.config.tile_url, { maxZoom: 19 }).addTo(map);
   map.on("click", (e) => {
     const hadAddress = Boolean(address.value);
     setPoint(e.latlng.lat, e.latlng.lng);
