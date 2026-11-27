@@ -11,8 +11,11 @@ const props = defineProps({
   lists: { type: Array, required: true },
   config: { type: Object, required: true },
   active: { type: Boolean, default: true },
+  incoming: { type: Array, default: () => [] },
+  answerBusy: { type: Boolean, default: false },
+  profileReload: { type: Number, default: 0 },
 });
-const emit = defineEmits(["back", "open", "edit", "open-profile", "to-list", "settings", "saved", "add", "show-on-map", "managed"]);
+const emit = defineEmits(["back", "open", "edit", "open-profile", "to-list", "settings", "saved", "add", "show-on-map", "managed", "answer"]);
 
 const page = ref(null);
 const posts = ref([]);
@@ -29,6 +32,7 @@ const categoryDraft = ref("");
 const editing = ref(false);
 const showAllFriends = ref(false);
 const busy = ref(false);
+const answering = ref(false);
 const displayName = ref("");
 const surname = ref("");
 const username = ref("");
@@ -138,6 +142,55 @@ async function load() {
   await Promise.all(people.map((person) => loadFace(person, seq).catch(() => {})));
 }
 
+watch(
+  () => props.answerBusy,
+  (busy) => {
+    const current = page.value;
+    if (!busy && current && props.incoming.includes(current.username)) answering.value = false;
+  },
+);
+
+watch(
+  () => page.value?.relation,
+  (relation) => {
+    if (relation !== "incoming") answering.value = false;
+  },
+);
+
+async function reloadAnswer() {
+  try {
+    await load();
+    if (page.value?.relation === "incoming") answering.value = false;
+  } catch (err) {
+    error.value = err.message;
+    answering.value = false;
+  }
+}
+
+watch(
+  () => props.profileReload,
+  (value) => {
+    if (!value || !page.value) return;
+    reloadAnswer();
+  },
+);
+
+watch(
+  () => props.incoming.join("\0"),
+  () => {
+    const current = page.value;
+    if (!current || current.relation !== "incoming") return;
+    if (props.incoming.includes(current.username)) return;
+    reloadAnswer();
+  },
+);
+
+function answerRequest(accept) {
+  if (answering.value || props.answerBusy || !page.value) return;
+  answering.value = true;
+  emit("answer", { username: page.value.username, accept });
+}
+
 watch(canMap, (allowed) => {
   if (!allowed) showMap.value = false;
 });
@@ -161,6 +214,7 @@ watch(
   ([id, active], previous) => {
     if (!active) return;
     if (!previous || previous[0] !== id) {
+      answering.value = false;
       chip.value = "all";
       showMap.value = false;
       editing.value = false;
@@ -341,7 +395,13 @@ async function toggleClose() {
         <button v-if="page.is_self" class="link" @click="emit('settings')">Настройки</button>
         <button v-if="page.relation === 'none'" class="primary" @click="addFriend">Добавить в друзья</button>
         <p v-if="page.relation === 'outgoing'" class="muted">Заявка отправлена</p>
-        <p v-if="page.relation === 'incoming'" class="muted">Хочет добавить вас</p>
+        <div v-if="page.relation === 'incoming'" class="stack profile-answer">
+          <p class="muted">Хочет добавить вас</p>
+          <div class="card-actions">
+            <button class="primary" :disabled="answerBusy || answering" @click="answerRequest(true)">Принять</button>
+            <button :disabled="answerBusy || answering" @click="answerRequest(false)">Отклонить</button>
+          </div>
+        </div>
         <button v-if="page.relation === 'friend'" @click="toggleClose">
           {{ page.is_close ? "Убрать из близких" : "В близкие друзья" }}
         </button>

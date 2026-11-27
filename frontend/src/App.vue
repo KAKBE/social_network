@@ -66,6 +66,9 @@ const requests = ref([]);
 const replies = ref([]);
 const deciding = ref(new Set());
 const openingReplies = ref(new Set());
+const profileAnswer = ref("");
+const profileReload = ref(0);
+const incomingNames = computed(() => requests.value.map((row) => row.username));
 const attention = computed(() => bellCount(unread.value, requests.value, replies.value));
 let feedServerMs = null;
 let measured = false;
@@ -104,6 +107,7 @@ function logout() {
   replies.value = [];
   deciding.value = new Set();
   openingReplies.value = new Set();
+  profileAnswer.value = "";
   clearInterval(poll);
   document.documentElement.dataset.theme = "dark";
 }
@@ -210,6 +214,30 @@ function markDeciding(id, busy) {
   if (busy) next.add(id);
   else next.delete(id);
   deciding.value = next;
+}
+
+async function onProfileAnswer({ username, accept }) {
+  if (profileAnswer.value || !username) return;
+  profileAnswer.value = username;
+  const stamp = session;
+  try {
+    let request = requests.value.find((row) => row.username === username);
+    if (!request) {
+      const epoch = requestEpoch;
+      const rows = await api.friendRequests();
+      if (stamp !== session || !getToken() || epoch !== requestEpoch) return;
+      requests.value = rows;
+      request = rows.find((row) => row.username === username);
+    }
+    if (!request) {
+      flash("Заявка не найдена");
+      profileReload.value += 1;
+      return;
+    }
+    await decideRequest(request, accept);
+  } finally {
+    if (profileAnswer.value === username) profileAnswer.value = "";
+  }
 }
 
 async function decideRequest(request, accept) {
@@ -611,6 +639,10 @@ onUnmounted(() => {
         :active="tab === 'profile'"
         :lists="lists"
         :config="config"
+        :incoming="incomingNames"
+        :answer-busy="profileAnswer !== ''"
+        :profile-reload="profileReload"
+        @answer="onProfileAnswer"
         @back="closeProfile"
         @open="openRecommendation"
         @edit="openRecommendation($event, true)"
