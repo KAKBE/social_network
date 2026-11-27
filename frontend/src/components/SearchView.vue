@@ -1,12 +1,11 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { ref } from "vue";
 import { api } from "../api.js";
 
 const emit = defineEmits(["open-profile"]);
 
 const query = ref("");
 const results = ref([]);
-const requests = ref([]);
 const error = ref("");
 const busy = ref(false);
 
@@ -16,16 +15,6 @@ const relationText = {
   incoming: "Хочет добавить вас",
   friend: "Уже в друзьях",
 };
-
-onMounted(() => {
-  loadRequests().catch((err) => {
-    error.value = err.message;
-  });
-});
-
-async function loadRequests() {
-  requests.value = await api.friendRequests();
-}
 
 async function search() {
   error.value = "";
@@ -70,27 +59,6 @@ async function addFriend(username) {
   }
 }
 
-async function accept(request) {
-  error.value = "";
-  try {
-    await api.acceptFriendRequest(request.id);
-    await loadRequests();
-    markRelation(request.username, "friend");
-  } catch (err) {
-    error.value = err.message;
-  }
-}
-
-async function reject(request) {
-  error.value = "";
-  try {
-    await api.rejectFriendRequest(request.id);
-    await loadRequests();
-    markRelation(request.username, "none");
-  } catch (err) {
-    error.value = err.message;
-  }
-}
 </script>
 
 <template>
@@ -98,7 +66,7 @@ async function reject(request) {
     <h2>Поиск</h2>
     <form class="stack" @submit.prevent="search">
       <label>Username <input v-model="query" autocapitalize="none" maxlength="50" required /></label>
-      <button :class="{ primary: !requests.length }" :disabled="busy">Найти</button>
+      <button class="primary" :disabled="busy">Найти</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -112,14 +80,6 @@ async function reject(request) {
       <button v-if="item.relation === 'friend'" @click="setClose(item.username, !item.is_close)">
         {{ item.is_close ? "Убрать из близких" : "В близкие друзья" }}
       </button>
-    </article>
-
-    <h2>Входящие заявки</h2>
-    <p v-if="!requests.length" class="muted">Заявок нет.</p>
-    <article v-for="request in requests" :key="request.id" class="card">
-      <p>{{ request.display_name }} <span class="muted">@{{ request.username }}</span></p>
-      <button class="primary" @click="accept(request)">Принять</button>
-      <button @click="reject(request)">Отклонить</button>
     </article>
   </section>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, ApiError, getToken, sessionToken, setToken } from "./api.js";
+import { bellCount, bellLabel } from "./bell.js";
 import { friendRecommendations } from "./feedList.js";
 import { readStoredToken, screenFor, TOKEN_KEY } from "./session.js";
 import { getSeries, measureFirstRender } from "./perf.js";
@@ -61,9 +62,13 @@ const lastPerf = ref(null);
 const perfOpen = ref(false);
 const notes = ref([]);
 const unread = ref(0);
+const requests = ref([]);
+const deciding = ref(new Set());
+const attention = computed(() => bellCount(unread.value, requests.value));
 let feedServerMs = null;
 let measured = false;
 let poll = 0;
+let requestEpoch = 0;
 
 function flash(message) {
   notice.value = message;
@@ -92,22 +97,37 @@ function logout() {
   lastPerf.value = null;
   notes.value = [];
   unread.value = 0;
+  requests.value = [];
+  deciding.value = new Set();
   clearInterval(poll);
   document.documentElement.dataset.theme = "dark";
 }
 
-async function refreshNotes() {
+async function refreshRequests(stamp, { quiet = false } = {}) {
+  const epoch = requestEpoch;
+  try {
+    const rows = await api.friendRequests();
+    if (stamp !== session || !getToken() || epoch !== requestEpoch) return;
+    requests.value = rows;
+  } catch (err) {
+    if (stamp !== session || !getToken() || quiet || epoch !== requestEpoch) return;
+    flash(err.message);
+  }
+}
+
+async function refreshNotes({ quietRequests = false } = {}) {
   const stamp = session;
   const data = await api.notifications();
   if (stamp !== session || !getToken()) return;
   notes.value = data.items;
   unread.value = data.unread;
+  await refreshRequests(stamp, { quiet: quietRequests });
 }
 
 function startPoll() {
   clearInterval(poll);
   poll = setInterval(() => {
-    refreshNotes().catch(() => {});
+    refreshNotes({ quietRequests: true }).catch(() => {});
   }, 10000);
 }
 
@@ -165,6 +185,38 @@ async function onLoggedIn(token) {
   setToken(token);
   await load();
   if (getToken()) startPoll();
+}
+
+function markDeciding(id, busy) {
+  const next = new Set(deciding.value);
+  if (busy) next.add(id);
+  else next.delete(id);
+  deciding.value = next;
+}
+
+async function decideRequest(request, accept) {
+  if (deciding.value.has(request.id)) return;
+  markDeciding(request.id, true);
+  requestEpoch += 1;
+  try {
+    if (accept) await api.acceptFriendRequest(request.id);
+    else await api.rejectFriendRequest(request.id);
+    requestEpoch += 1;
+    requests.value = requests.value.filter((row) => row.id !== request.id);
+    if (accept) {
+      flash("Заявка принята");
+      await Promise.all([loadFriendOptions(), refreshFeed(), refreshRequests(session, { quiet: true })]);
+    } else {
+      flash("Заявка отклонена");
+      await refreshRequests(session, { quiet: true });
+    }
+  } catch (err) {
+    requestEpoch += 1;
+    flash(err.message);
+    await refreshRequests(session, { quiet: true });
+  } finally {
+    markDeciding(request.id, false);
+  }
 }
 
 async function openNote(item) {
@@ -388,14 +440,14 @@ onUnmounted(() => {
   <div v-else-if="screen === 'loading'" class="login"><p class="muted">Загрузка…</p></div>
   <div v-else class="app">
     <header class="topbar">
-      <button class="icon bell" :aria-label="unread ? `Уведомления, ${unread}` : 'Уведомления'" @click="tab = 'notifications'">
+      <button class="icon bell" :aria-label="bellLabel(attention)" @click="tab = 'notifications'">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <path
             fill="currentColor"
             d="M12 3a5 5 0 0 0-5 5v2.1c0 .8-.3 1.6-.8 2.2L4.6 14.4A1 1 0 0 0 5.4 16h13.2a1 1 0 0 0 .8-1.6l-1.6-2.1a3.2 3.2 0 0 1-.8-2.2V8a5 5 0 0 0-5-5zm0 18a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 21z"
           />
         </svg>
-        <span v-if="unread" class="bell-count">{{ unread }}</span>
+        <span v-if="attention" class="bell-count">{{ attention }}</span>
       </button>
       <strong>По Следу</strong>
       <button class="badge" @click="perfOpen = !perfOpen">
@@ -436,10 +488,27 @@ onUnmounted(() => {
 
       <section v-show="tab === 'notifications'" class="page">
         <h2>Уведомления</h2>
-        <p v-if="!notes.length" class="muted">Уведомлений нет.</p>
-        <button v-for="item in notes" :key="item.id" class="note" @click="openNote(item)">
-          {{ item.author_name }}: новая рекомендация «{{ item.place_name }}»
-        </button>
+        <p v-if="!requests.length && !notes.length" class="muted">Уведомлений нет.</p>
+        <template v-if="requests.length">
+          <h3>Заявки в друзья</h3>
+          <article v-for="request in requests" :key="request.id" class="card">
+            <header class="card-head">
+              <button class="link" @click="openProfile(request.public_id)">{{ request.display_name }}</button>
+              <span class="muted small">@{{ request.username }}</span>
+            </header>
+            <div class="card-actions">
+              <button class="primary" :disabled="deciding.has(request.id)" @click="decideRequest(request, true)">Принять</button>
+              <button :disabled="deciding.has(request.id)" @click="decideRequest(request, false)">Отклонить</button>
+            </div>
+          </article>
+        </template>
+        <template v-if="notes.length">
+          <h3 :class="{ 'split-title': requests.length }">Новые места</h3>
+          <button v-for="item in notes" :key="item.id" class="note" @click="openNote(item)">
+            {{ item.author_name }}: новая рекомендация «{{ item.place_name }}»
+          </button>
+        </template>
+        <p v-if="requests.length && !notes.length" class="muted">Новых мест нет.</p>
       </section>
 
       <section v-show="tab === 'feed'" class="page">

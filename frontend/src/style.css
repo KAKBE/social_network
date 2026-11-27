@@ -252,6 +252,10 @@ button.note {
   text-align: left;
 }
 
+h3.split-title {
+  margin-top: 18px;
+}
+
 .badge {
   min-height: 0;
   padding: 4px 8px;
