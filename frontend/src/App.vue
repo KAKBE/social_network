@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, ApiError, getToken, sessionToken, setToken } from "./api.js";
-import { bellCount, bellLabel } from "./bell.js";
+import { bellCount, bellLabel, replyTitle } from "./bell.js";
 import { friendRecommendations } from "./feedList.js";
 import { readStoredToken, screenFor, TOKEN_KEY } from "./session.js";
 import { getSeries, measureFirstRender } from "./perf.js";
@@ -63,12 +63,15 @@ const perfOpen = ref(false);
 const notes = ref([]);
 const unread = ref(0);
 const requests = ref([]);
+const replies = ref([]);
 const deciding = ref(new Set());
-const attention = computed(() => bellCount(unread.value, requests.value));
+const openingReplies = ref(new Set());
+const attention = computed(() => bellCount(unread.value, requests.value, replies.value));
 let feedServerMs = null;
 let measured = false;
 let poll = 0;
 let requestEpoch = 0;
+let replyEpoch = 0;
 
 function flash(message) {
   notice.value = message;
@@ -98,7 +101,9 @@ function logout() {
   notes.value = [];
   unread.value = 0;
   requests.value = [];
+  replies.value = [];
   deciding.value = new Set();
+  openingReplies.value = new Set();
   clearInterval(poll);
   document.documentElement.dataset.theme = "dark";
 }
@@ -115,6 +120,18 @@ async function refreshRequests(stamp, { quiet = false } = {}) {
   }
 }
 
+async function refreshReplies(stamp, { quiet = false } = {}) {
+  const epoch = replyEpoch;
+  try {
+    const rows = await api.friendReplies();
+    if (stamp !== session || !getToken() || epoch !== replyEpoch) return;
+    replies.value = rows;
+  } catch (err) {
+    if (stamp !== session || !getToken() || quiet || epoch !== replyEpoch) return;
+    flash(err.message);
+  }
+}
+
 async function refreshNotes({ quietRequests = false } = {}) {
   const stamp = session;
   const data = await api.notifications();
@@ -122,6 +139,7 @@ async function refreshNotes({ quietRequests = false } = {}) {
   notes.value = data.items;
   unread.value = data.unread;
   await refreshRequests(stamp, { quiet: quietRequests });
+  await refreshReplies(stamp, { quiet: quietRequests });
 }
 
 function startPoll() {
@@ -216,6 +234,35 @@ async function decideRequest(request, accept) {
     await refreshRequests(session, { quiet: true });
   } finally {
     markDeciding(request.id, false);
+  }
+}
+
+function markOpening(id, busy) {
+  const next = new Set(openingReplies.value);
+  if (busy) next.add(id);
+  else next.delete(id);
+  openingReplies.value = next;
+}
+
+async function openReply(reply) {
+  if (openingReplies.value.has(reply.id)) return;
+  markOpening(reply.id, true);
+  const stamp = session;
+  replyEpoch += 1;
+  try {
+    await api.readFriendReply(reply.id);
+    if (stamp !== session || !getToken()) return;
+    replies.value = replies.value.filter((row) => row.id !== reply.id);
+    openProfile(reply.public_id);
+  } catch (err) {
+    if (stamp !== session || !getToken()) return;
+    flash(err.message);
+  } finally {
+    markOpening(reply.id, false);
+    if (stamp === session && getToken()) {
+      replyEpoch += 1;
+      await refreshReplies(stamp, { quiet: true });
+    }
   }
 }
 
@@ -488,7 +535,7 @@ onUnmounted(() => {
 
       <section v-show="tab === 'notifications'" class="page">
         <h2>Уведомления</h2>
-        <p v-if="!requests.length && !notes.length" class="muted">Уведомлений нет.</p>
+        <p v-if="!requests.length && !replies.length && !notes.length" class="muted">Уведомлений нет.</p>
         <template v-if="requests.length">
           <h3>Заявки в друзья</h3>
           <article v-for="request in requests" :key="request.id" class="card">
@@ -502,8 +549,20 @@ onUnmounted(() => {
             </div>
           </article>
         </template>
+        <template v-if="replies.length">
+          <h3 :class="{ 'split-title': requests.length }">Новые друзья</h3>
+          <button
+            v-for="reply in replies"
+            :key="reply.id"
+            class="note"
+            :disabled="openingReplies.has(reply.id)"
+            @click="openReply(reply)"
+          >
+            {{ replyTitle(reply) }}
+          </button>
+        </template>
         <template v-if="notes.length">
-          <h3 :class="{ 'split-title': requests.length }">Новые места</h3>
+          <h3 :class="{ 'split-title': requests.length || replies.length }">Новые места</h3>
           <button v-for="item in notes" :key="item.id" class="note" @click="openNote(item)">
             {{ item.author_name }}: новая рекомендация «{{ item.place_name }}»
           </button>

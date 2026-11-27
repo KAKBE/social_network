@@ -73,6 +73,19 @@ class FriendRequest(Base):
     from_user: Mapped[User] = relationship(foreign_keys=[from_user_id])
 
 
+class FriendReply(Base):
+    """The sender learns that their request was accepted. One notice per request."""
+
+    __tablename__ = "friend_replies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    request_id: Mapped[int] = mapped_column(ForeignKey("friend_requests.id", ondelete="CASCADE"), unique=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CloseFriend(Base):
     """A friend the user marked as close. The mark belongs to the user, not the pair."""
 

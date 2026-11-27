@@ -20,6 +20,7 @@ from app.models import (
     AuthSession,
     CloseFriend,
     FriendNotification,
+    FriendReply,
     FriendRequest,
     Friendship,
     PerfSample,
@@ -48,6 +49,7 @@ from app.schemas import (
     GeocodeIn,
     GeocodeItemOut,
     FriendRequestIn,
+    FriendReplyOut,
     FriendRequestOut,
     GeocodeOut,
     LoginIn,
@@ -592,6 +594,7 @@ def accept_friend_request(request_id: int, user: CurrentUser, session: DbSession
     row.status = "accepted"
     session.add(Friendship(user_id=row.from_user_id, friend_id=row.to_user_id))
     session.add(Friendship(user_id=row.to_user_id, friend_id=row.from_user_id))
+    session.add(FriendReply(user_id=row.from_user_id, actor_id=user.id, request_id=row.id))
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -602,6 +605,41 @@ def reject_friend_request(request_id: int, user: CurrentUser, session: DbSession
     row.status = "rejected"
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def friend_reply_outs(session: Session, user_id: int) -> list[FriendReplyOut]:
+    rows = session.execute(
+        select(FriendReply, User)
+        .join(User, User.id == FriendReply.actor_id)
+        .where(FriendReply.user_id == user_id, FriendReply.read_at.is_(None))
+        .order_by(FriendReply.created_at.desc(), FriendReply.id.desc())
+    ).all()
+    return [
+        FriendReplyOut(
+            id=reply.id,
+            public_id=actor.public_id,
+            username=actor.username,
+            display_name=actor.display_name,
+            surname=actor.surname or "",
+        )
+        for reply, actor in rows
+    ]
+
+
+@router.get("/friend-replies")
+def list_friend_replies(user: CurrentUser, session: DbSession) -> list[FriendReplyOut]:
+    return friend_reply_outs(session, user.id)
+
+
+@router.post("/friend-replies/{reply_id}/read")
+def read_friend_reply(reply_id: int, user: CurrentUser, session: DbSession) -> list[FriendReplyOut]:
+    reply = session.get(FriendReply, reply_id)
+    if reply is None or reply.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Уведомление не найдено")
+    if reply.read_at is None:
+        reply.read_at = utcnow()
+        session.commit()
+    return friend_reply_outs(session, user.id)
 
 
 @router.get("/users/{public_id}")

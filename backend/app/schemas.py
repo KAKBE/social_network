@@ -406,6 +406,14 @@ class ClientConfigOut(BaseModel):
     tile_attribution: str
 
 
+class FriendReplyOut(BaseModel):
+    id: int
+    public_id: uuid.UUID
+    username: str
+    display_name: str
+    surname: str = ""
+
+
 class NotificationOut(BaseModel):
     id: int
     recommendation_id: int

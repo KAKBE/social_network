@@ -116,6 +116,8 @@ export const api = {
   friends: () => request("GET", "/api/friends"),
   notifications: () => request("GET", "/api/notifications"),
   readNotification: (id) => request("POST", `/api/notifications/${id}/read`),
+  friendReplies: () => request("GET", "/api/friend-replies"),
+  readFriendReply: (id) => request("POST", `/api/friend-replies/${id}/read`),
   setCloseFriend: (username, close) => request("PUT", `/api/friends/${encodeURIComponent(username)}/close`, { close }),
   feedWithTiming: () => send("GET", "/api/feed?limit=200"),
   recommendation: (id) => request("GET", `/api/recommendations/${id}`),
